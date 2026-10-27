@@ -132,6 +132,8 @@ def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = 
         for key in intent.patch
         if old.model_dump(mode="json")[key] != state["requirements"][key]
     ]
+    if not state["messages"]:
+        state["changes"] = []
     if intent.month_hint:
         state["_month_hint"] = intent.month_hint
     pending = state["_pending"]
@@ -202,9 +204,7 @@ def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = 
             selected_plan=None,
         )
         state["_metrics"]["clarifications"] += 1
-        assistant = questions[0]["question"]
-        if len(questions) > 1:
-            assistant += " Ещё уточним: " + "; ".join(q["question"] for q in questions[1:])
+        assistant = "Уточним условия ниже, чтобы не выбрать неподходящий вариант. Остальные пожелания сохранены."
     elif intent.price_question:
         comparison = next(
             (item for item in state["counterfactuals"] if item["field"] == intent.price_question),
@@ -246,7 +246,12 @@ def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = 
         state["catalog_version"] = result["catalog_version"]
         state["plan_labels"] = result.get("plan_labels", {})
         if result["plans"]:
-            assistant = f"Нашёл {len(result['plans'])} варианта для вашей поездки. Проверил размещение, даты и обязательные условия. Стоимость указана за всех и за всю поездку."
+            assistant = f"Нашёл {len(result['plans'])} варианта для вашей поездки. Проверил размещение, даты и обязательные условия. Стоимость указана за всех гостей и весь срок."
+            assistant += (
+                " Самостоятельная дорога не рассчитана и не входит в сумму."
+                if requirements.transport == "self"
+                else " Дорога туда и обратно и трансфер включены."
+            )
             if requirements.budget_scope == "hotel":
                 assistant += (
                     " Бюджет применён к отелю; транспорт показан отдельно в полной стоимости."

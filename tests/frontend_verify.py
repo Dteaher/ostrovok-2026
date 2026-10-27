@@ -148,6 +148,43 @@ def run():
         act(mobile_page, lambda: mobile_page.locator(".choice-chip").first.click())
         expect(mobile_page.locator(".hotel-card")).to_have_count(3)
         mobile_page.screenshot(path=str(output / "ui-clarified.png"), full_page=True)
+        # Unpriced self travel is visibly excluded instead of being advertised as free.
+        mobile_page.locator("#new-trip").click()
+        mobile_page.locator("#trip-message").fill(
+            "В Сочи с 6 ноября 2026 на 7 ночей вдвоем на своей машине до 160 тысяч"
+        )
+        act(mobile_page, lambda: mobile_page.locator(".composer-submit").click())
+        expect(mobile_page.locator(".hotel-card")).to_have_count(3)
+        for caption in mobile_page.locator(".total-price > span").all():
+            expect(caption).to_contain_text("без самостоятельной дороги")
+            assert "с дорогой" not in caption.inner_text()
+        act(mobile_page, lambda: mobile_page.locator(".hotel-card .button").first.click())
+        expect(mobile_page.locator(".mobile-checkout-link p span")).to_have_text(
+            "За всех · без самостоятельной дороги"
+        )
+        expect(mobile_page.locator(".checkout-panel .price-breakdown h3")).to_have_text(
+            "Стоимость включённых услуг"
+        )
+        expect(mobile_page.locator(".checkout-panel .price-exclusion-note")).to_have_text(
+            "Стоимость самостоятельной дороги и трансфера не рассчитана и не включена в сумму."
+        )
+        price_rows = mobile_page.locator(".checkout-panel .price-breakdown dl > div")
+        expect(price_rows.nth(1).locator("dd")).to_have_text("Не рассчитано")
+        expect(price_rows.nth(2).locator("dd")).to_have_text("Не рассчитано")
+        self_session_id = mobile_page.evaluate("localStorage.getItem('oplan-session-v1')")
+        self_session = mobile.request.get(f"{base}/api/sessions/{self_session_id}").json()
+        self_plan = self_session["selected_plan"]
+        assert self_plan["transport"]["mode"] == "self"
+        assert self_plan["price"]["total"] == self_plan["price"]["hotel"] + self_plan["price"]["extras"]
+        assert mobile_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        mobile_page.screenshot(path=str(output / "ui-self-checkout.png"), full_page=True)
+        response = mobile.request.patch(
+            f"{base}/api/sessions/{self_session_id}/requirements",
+            data={"revision": self_session["revision"], "patch": {"max_beach_m": 0}},
+        )
+        assert response.ok
+        mobile_page.reload()
+        expect(mobile_page.locator(".condition-list")).to_contain_text("Море до 0 м")
         # An impossible budget remains explicit and receives a useful empty state.
         mobile_page.locator("#new-trip").click()
         mobile_page.locator("#trip-message").fill(
@@ -177,7 +214,7 @@ def run():
         assert not errors, errors
         browser.close()
         print(
-            "PASS: desktop/mobile, full API journey, condition retention, stale recovery, demo checkout, restore, order download, typed clarification, empty budget, safe text rendering, network recovery; no page errors or horizontal overflow."
+            "PASS: desktop/mobile, full API journey, condition retention, stale recovery, demo checkout, restore, order download, typed clarification, self-travel price exclusions, zero beach boundary, empty budget, safe text rendering, network recovery; no page errors or horizontal overflow."
         )
 
 

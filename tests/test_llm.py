@@ -161,3 +161,14 @@ def test_model_cannot_turn_month_only_wish_into_exact_day(llm):
     result = asyncio.run(extract_intent("Хочу в ноябре", TripRequirements(), date(2026, 10, 27)))
     assert "check_in" not in result.patch
     assert result.month_hint == 11
+
+
+def test_duration_number_does_not_authorize_model_to_change_guests_and_destination(llm):
+    configure, _ = llm
+    configure(payload={"patch": {"adults": 1, "destination": "Адлер"}, "recognized": True})
+    req = current()
+    result = asyncio.run(extract_intent("На 5 ночей", req, date(2026, 10, 27)))
+    merged = TripRequirements.model_validate(req.model_dump() | result.patch)
+    assert merged.nights == 5
+    assert merged.adults == 2
+    assert merged.destination == "Сочи"

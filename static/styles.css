@@ -1074,6 +1074,11 @@ strong {
   text-align:right;
   margin-top:5px
 }
+.price-breakdown>.price-exclusion-note {
+  text-align:left;
+  margin:0 0 18px;
+  line-height:1.7
+}
 .checkout-form {
   border-top:1px solid var(--line);
   margin-top:23px;

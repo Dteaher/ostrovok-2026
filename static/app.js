@@ -177,7 +177,7 @@
     const terms = [r.destination || 'Куда — уточним', `${date(r.check_in)} · ${nights(r.nights)}`, people.join(' + '), r.budget ? `До ${money(r.budget)}${r.budget_scope === 'hotel' ? ' на отель' : ' за всё'}` : 'Бюджет не задан', `${transport}${r.origin ? ' · ' + r.origin : ''}`];
     const flags = [['breakfast', 'Завтраки'], ['pool', 'Бассейн'], ['pets', 'С питомцем'], ['refundable', 'С отменой'], ['direct_only', 'Без пересадок'], ['quiet', 'Тихий отдых'], ['accessible', 'Доступная среда']];
     flags.forEach(([key, label]) => { if (r[key]) terms.push(label); });
-    if (r.max_beach_m) terms.push(`Море до ${r.max_beach_m} м`);
+    if (r.max_beach_m != null) terms.push(`Море до ${r.max_beach_m} м`);
     if (r.min_rating) terms.push(`Оценка от ${r.min_rating}`);
     if (r.stars) terms.push(`От ${r.stars} звёзд`);
     return node('section', { class: 'conditions', 'aria-label': 'Сохранённые условия поездки' }, smallLabel('Ваши условия · сохраняем при изменениях'), node('ul', { class: 'condition-list' }, terms.map(term => node('li', {}, term))));
@@ -216,7 +216,7 @@
         node('p', { class: 'hotel-logistics' }, `${hotel.beach_m} м до моря · ${plan.meal || 'Питание уточняется'}`),
         node('div', { class: 'fit-list' }, (plan.reasons || []).slice(0, 3).map(reason => node('p', {}, node('span', { 'aria-hidden': 'true' }, '✓'), reason))),
         node('p', { class: 'compromise' }, node('span', {}, 'Учтите: '), plan.compromises?.length ? plan.compromises.join(' · ') : 'Цены и доступность демонстрационные.'),
-        node('div', { class: 'card-bottom' }, node('p', { class: 'total-price' }, money(plan.price.total), node('span', {}, `За всех · ${nights(plan.dates.nights)} · с дорогой`)),
+        node('div', { class: 'card-bottom' }, node('p', { class: 'total-price' }, money(plan.price.total), node('span', {}, `За всех · ${nights(plan.dates.nights)} · ${plan.transport.mode === 'self' ? 'без самостоятельной дороги' : 'с дорогой'}`)),
           button(node('span', {}, 'Посмотреть план ', arrow()), () => mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/select`, { plan_id: plan.id, revision: state.session.revision }), 'button button-full'))));
   }
 
@@ -252,10 +252,12 @@
   }
 
   function priceBreakdown(plan) {
+    const selfTravel = plan.transport.mode === 'self';
     const entries = [['Проживание', plan.price.hotel], ['Дорога туда и обратно', plan.price.transport], ['Трансфер', plan.price.transfer], ['Дополнительно', plan.price.extras]];
     return node('div', { class: 'price-breakdown' },
-      node('h3', {}, 'Вся поездка, одна сумма'),
-      node('dl', {}, entries.map(([label, value]) => node('div', {}, node('dt', {}, label), node('dd', {}, money(value))))),
+      node('h3', {}, selfTravel ? 'Стоимость включённых услуг' : 'Вся поездка, одна сумма'),
+      selfTravel ? node('p', { class: 'muted small price-exclusion-note' }, 'Стоимость самостоятельной дороги и трансфера не рассчитана и не включена в сумму.') : null,
+      node('dl', {}, entries.map(([label, value], index) => node('div', {}, node('dt', {}, label), node('dd', {}, selfTravel && (index === 1 || index === 2) ? 'Не рассчитано' : money(value))))),
       node('div', { class: 'breakdown-total' }, node('span', {}, 'Итого за всех'), node('strong', {}, money(plan.price.total))),
       node('p', { class: 'muted small' }, `${nights(plan.dates.nights)} · ${plan.guests.adults} взр.${plan.guests.children_ages.length ? ` + ${plan.guests.children_ages.length} дет.` : ''} · рубли`));
   }
@@ -303,7 +305,7 @@
     const plan = state.session.selected_plan;
     if (!plan) return results();
     return node('div', { class: 'selected-content' }, button('← К вариантам поездки', () => { state.showResults = true; render(); document.querySelector('.section-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 'back-button'),
-      node('div', { class: 'mobile-checkout-link' }, node('p', {}, money(plan.price.total), node('span', {}, 'За всю поездку · за всех')), node('a', { href: '#checkout', class: 'button' }, 'К оформлению ↓')),
+      node('div', { class: 'mobile-checkout-link' }, node('p', {}, money(plan.price.total), node('span', {}, plan.transport.mode === 'self' ? 'За всех · без самостоятельной дороги' : 'За всю поездку · за всех')), node('a', { href: '#checkout', class: 'button' }, 'К оформлению ↓')),
       node('div', { class: 'selected-layout' }, tripDetails(plan), checkoutForm(plan)), history());
   }
 

@@ -69,11 +69,11 @@ FIELD_EVIDENCE = {
     "budget": r"бюджет|тысяч|тыс\b|₽|руб|дешев|сумм|лимит|максимум|\d+\s*[кk]\b",
     "budget_scope": r"бюджет|отель|проживан|поездк|включая|дорог",
     "origin": r"\bиз\b|выезд|вылет|отправлен",
-    "destination": r"\b(?:в|во|на|к|куда)\b|направлен|локаци|город|курорт",
+    "destination": r"направлен|локаци|город|курорт",
     "check_in": rf"\d{{4}}-\d{{2}}-\d{{2}}|\d{{1,2}}[./]\d{{1,2}}|\d{{1,2}}\s*(?:{MONTH_PATTERN})|завтра|сегодня|позже|раньше|через|заезд|дат[аыу]|понедельник|вторник|сред[ау]|четверг|пятниц|суббот|воскресень",
     "nights": r"ноч|дн[яеи]|недел|уикенд|выходн|длитель|короче|дольше",
-    "adults": rf"взросл|человек|\bнас\b|вдвоем|втроем|один|одна|компан|\b(?:{NUMBER})\b",
-    "children_ages": r"ребен|дет[ьеий]|детьми|малыш|\bлет\b|\bгод",
+    "adults": r"взросл|человек|\bнас\b|вдвоем|втроем|еду один|еду одна|компан",
+    "children_ages": r"ребен|дет[ьеий]|детьми|малыш|доч[ьи]|дочер|сын|внук|внуч",
     "transport": r"перелет|поезд(?:ом|е)?\b|летим|самолет|транспорт|машин|дорог|билет",
     "direct_only": r"прям|пересад|стыков|самолет",
     "breakfast": r"завтрак|питани|утренн[а-я]* ед",
@@ -123,6 +123,7 @@ def inferred_year(month: int, day: int, today: date) -> int:
 def parse_dates(text: str, current: TripRequirements, today: date, result: ParsedIntent) -> None:
     patch = result.patch
     iso = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", text)
+    iso_interval = re.search(r"(20\d{2}-\d{2}-\d{2})\s*(?:по|до|–|-)\s*(20\d{2}-\d{2}-\d{2})", text)
     dotted = re.search(r"\b(\d{1,2})[./](\d{1,2})(?:[./](20\d{2}))?\b", text)
     interval = re.search(
         rf"\bс\s*(\d{{1,2}})\s*(?:по|до|–|-)\s*(\d{{1,2}})\s*({MONTH_PATTERN})(?:\s+(20\d{{2}}))?",
@@ -137,7 +138,18 @@ def parse_dates(text: str, current: TripRequirements, today: date, result: Parse
         text,
     )
     named = re.search(rf"\b(\d{{1,2}})\s*({MONTH_PATTERN})(?:\s+(20\d{{2}}))?", text)
-    if full_interval or dotted_interval:
+    if iso_interval:
+        try:
+            start_date, end_date = (
+                date.fromisoformat(iso_interval[1]),
+                date.fromisoformat(iso_interval[2]),
+            )
+        except ValueError as exc:
+            raise ValueError("Проверьте даты заезда и выезда") from exc
+        if end_date <= start_date:
+            raise ValueError("Дата выезда должна быть позже даты заезда.")
+        patch.update(check_in=start_date.isoformat(), nights=(end_date - start_date).days)
+    elif full_interval or dotted_interval:
         match = full_interval or dotted_interval
         start_day, end_day = int(match[1]), int(match[4])
         start_month = month_number(match[2]) if full_interval else int(match[2])
@@ -284,14 +296,17 @@ def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> 
     if re.search(r"без детей|ребен[а-я]* не (?:едет|берем)", text):
         result.patch["children_ages"] = []
         return
-    child_mention = bool(re.search(r"ребен|дет[ьеий]|детьми|малыш", text))
-    ages_match = re.search(
-        r"((?:\d{1,2}\s*(?:,|и|лет и|года и)\s*)*\d{1,2})\s*(?:лет|года|год)\b", text
+    child_words = r"ребен[а-я]*|дет[ьеий][а-я]*|детьми|малыш[а-я]*|доч[ьи][а-я]*|дочер[а-я]*|сын[а-я]*|внук[а-я]*|внуч[а-я]*"
+    child_mention = bool(re.search(child_words, text))
+    ages_matches = list(
+        re.finditer(r"((?:\d{1,2}\s*(?:,|и|лет и|года и)\s*)*\d{1,2})\s*(?:лет|года|год)\b", text)
     )
-    if ages_match and (
+    if ages_matches and (
         child_mention or current.children_ages or re.fullmatch(r"\d{1,2}\s*(?:лет|года|год)", text)
     ):
-        result.patch["children_ages"] = [int(x) for x in re.findall(r"\d{1,2}", ages_match[1])]
+        result.patch["children_ages"] = [
+            int(x) for match in ages_matches for x in re.findall(r"\d{1,2}", match[1])
+        ]
     elif child_mention:
         result.questions.append(
             {
@@ -304,6 +319,9 @@ def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> 
             }
         )
     child_count = re.search(rf"({NUMBER})\s*(?:дет[еьи]|ребен)", text)
+    repeated_children = len(
+        re.findall(r"ребен[а-я]*|доч[ьи][а-я]*|дочер[а-я]*|сын[а-я]*|внук[а-я]*|внуч[а-я]*", text)
+    )
     if (
         child_count
         and "children_ages" in result.patch
@@ -314,6 +332,15 @@ def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> 
             {
                 "field": "children_ages",
                 "question": "Укажите возраст каждого ребёнка: например, «дети 5 и 9 лет». Пока возраст известен не для всех детей.",
+                "options": [],
+            }
+        )
+    if repeated_children > 1 and len(result.patch.get("children_ages", [])) < repeated_children:
+        result.patch.pop("children_ages", None)
+        result.questions.append(
+            {
+                "field": "children_ages",
+                "question": "Укажите возраст каждого ребёнка на момент поездки; пока известны не все возрасты.",
                 "options": [],
             }
         )
@@ -341,7 +368,7 @@ def parse_preferences(text: str, result: ParsedIntent) -> None:
             r"с бассейн|нуж[а-я]* бассейн|бассейн обязател|хочу бассейн|добав[а-я]* бассейн|хочется бассейн",
         ),
         "refundable": (
-            r"без (?:бесплатн[а-я]* )?отмен|отмена (?:не нужна|необязательна)|невозврат|можно без (?:бесплатной )?отмен",
+            r"без (?:бесплатн[а-я]* )?отмен|отмена (?:не нужна|необязательна)|невозврат|можно без (?:бесплатной )?отмен|не (?:хочу|нужен|нужна)\s*(?:бесплатн[а-я]*\s+отмен|возвратн[а-я]*\s+тариф)",
             r"бесплатн[а-я]* отмен|возвратн[а-я]* тариф|с отменой|с возможностью отмен",
         ),
         "quiet": (
@@ -385,14 +412,14 @@ def parse_preferences(text: str, result: ParsedIntent) -> None:
         result.patch["max_beach_m"] = 500
 
 
-def parse_location_transport(text: str, result: ParsedIntent) -> None:
+def parse_location_transport(text: str, result: ParsedIntent, original: str = "") -> None:
     destinations = {
-        r"сочи|больш[а-я]* сочи": "Сочи",
         r"адлер": "Адлер",
         r"имеретин|сириус": "Сириус",
-        r"хост[ауе]\b": "Хоста",
+        r"хост[ауеы]\b": "Хоста",
         r"дагомыс": "Дагомыс",
         r"лазаревск": "Лазаревское",
+        r"сочи|больш[а-я]* сочи": "Сочи",
         r"красн[а-я]* полян": "Красная Поляна",
         r"антал[ьи]|антали": "Анталья",
         r"турци": "Турция",
@@ -411,7 +438,9 @@ def parse_location_transport(text: str, result: ParsedIntent) -> None:
         r"калининград": "Калининград",
     }
     for pattern, location in destinations.items():
-        if re.search(pattern, text) and not re.search(rf"из\s+(?:{pattern})[а-я]*", text):
+        if re.search(pattern, text) and not re.search(
+            rf"(?:из|не)\s+(?:(?:хочу|хотим|в|во)\s+)*(?:{pattern})[а-я]*", text
+        ):
             result.patch["destination"] = location
             break
     if "destination" not in result.patch:
@@ -465,11 +494,23 @@ def parse_location_transport(text: str, result: ParsedIntent) -> None:
         }
         for candidate in re.finditer(r"\b(?:в|во|на)\s+([а-я][а-я-]{2,})", text):
             word = candidate[1]
-            if word not in non_destinations and not any(re.match(stem, word) for stem in MONTHS):
+            proper_name = re.search(r"\b" + re.escape(word), original, flags=re.IGNORECASE)
+            capitalized = bool(proper_name and original[proper_name.start()].isupper())
+            directional_change = bool(
+                re.search(r"лучше\s+(?:в|на)|поедем\s+(?:в|на)|направление", text)
+            )
+            if (
+                word not in non_destinations
+                and word not in NUMBERS
+                and not any(re.match(stem, word) for stem in MONTHS)
+                and (capitalized or directional_change)
+            ):
                 result.patch["destination"] = word.capitalize()
                 break
     origin = re.search(r"\bиз\s+([а-я][а-я-]+)", text)
-    if origin:
+    if origin and origin[1] not in (
+        {"них", "него", "нее", "нас", "вас", "всех", "которых", "этого", "дома"} | set(NUMBERS)
+    ):
         value = origin[1]
         result.patch["origin"] = (
             "Москва"
@@ -478,15 +519,38 @@ def parse_location_transport(text: str, result: ParsedIntent) -> None:
             if value in ("спб",) or "петербург" in value
             else value.removesuffix("а").capitalize()
         )
+
+    def mentioned_mode(pattern):
+        matches = list(
+            re.finditer(
+                r"(?:(не|без)\s+(?:(?:хочу|хотим|нужен|нужны|на)\s+)*)?(?:" + pattern + ")", text
+            )
+        )
+        return None if not matches else matches[-1][1] is None
+
+    train = mentioned_mode(r"\bпоезд(?:ом|е|а|у|ы)?\b|железн[а-я]*|\bжд\b")
+    flight = mentioned_mode(r"перелет[а-я]*|самолет[а-я]*|рейс[а-я]*|летим")
     if re.search(
-        r"сво[а-я]* машин|на машине|свой транспорт|без (?:перелета|билетов)|только отель|доберемся сами|едем сами",
+        r"сво[а-я]* машин|на машине|свой транспорт|только отель|доберемся сами|едем сами",
         text,
     ):
         result.patch["transport"] = "self"
-    elif re.search(r"\bпоезд(?:ом|е|а|у|ы)?\b|железн|\bжд\b", text):
-        result.patch["transport"] = "train"
-    elif re.search(r"перелет|самолет|рейс|летим", text):
+    elif flight and (not train or re.search(r"только\s+(?:самолет|перелет|рейс)", text)):
         result.patch["transport"] = "flight"
+    elif train:
+        result.patch["transport"] = "train"
+    elif train is False or flight is False:
+        result.questions.append(
+            {
+                "field": "transport",
+                "question": "Как доберётесь? Выберите вариант, который можно включить в расчёт.",
+                "options": [
+                    {"label": "Перелёт из Москвы", "value": "flight"},
+                    {"label": "Поезд из Москвы", "value": "train"},
+                    {"label": "Самостоятельно, без оценки дороги", "value": "self"},
+                ],
+            }
+        )
 
 
 def parse_rules(
@@ -526,7 +590,7 @@ def parse_rules(
     parse_budget(text, current, result)
     parse_guests(text, current, result)
     parse_preferences(text, result)
-    parse_location_transport(text, result)
+    parse_location_transport(text, result, original=message)
     unsupported = []
     for pattern, label in [
         (r"все включено|all inclusive", "питание «всё включено»"),
@@ -536,6 +600,10 @@ def parse_rules(
         (r"только для взрослых|без детей в отеле|adults.only|18\+", "отель только для взрослых"),
         (r"детск[а-я]* клуб|анимаци|детск[а-я]* комнат", "детский клуб или анимация"),
         (r"вид[а-я]* на море", "вид на море из номера"),
+        (
+            r"спальн[а-я]*|раздельн[а-я]* кроват|отдельн[а-я]* кроват|кухн[а-я]*",
+            "отдельные спальни, кровати или кухня",
+        ),
         (
             r"тепл[а-я]* мор[ея]|купать[а-я]* в мор[ея]|купание",
             "тёплое море для купания",
@@ -617,8 +685,10 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
                 raise ValueError("Unexpected extraction fields")
             normalized = message.lower().replace("ё", "е")
             for field_name, value in patch.items():
-                if value != current.model_dump(mode="json")[field_name] and not re.search(
-                    FIELD_EVIDENCE[field_name], normalized
+                if (
+                    value != current.model_dump(mode="json")[field_name]
+                    and field_name not in rules.patch
+                    and not re.search(FIELD_EVIDENCE[field_name], normalized)
                 ):
                     raise ValueError("Extraction changes a requirement without message evidence")
             TripRequirements.model_validate(current.model_dump() | patch, strict=False)
