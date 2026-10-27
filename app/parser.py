@@ -13,6 +13,7 @@ from datetime import date, timedelta
 
 import httpx
 
+from app.llm_config import LLMConfig, failure_notice
 from app.models import TripRequirements
 
 logger = logging.getLogger(__name__)
@@ -858,7 +859,7 @@ def parse_rules(
 
 
 def configured_mode() -> str:
-    return "llm" if os.getenv("LLM_API_KEY") and os.getenv("LLM_MODEL") else "rules"
+    return "llm" if os.getenv("LLM_API_KEY", "").strip() and os.getenv("LLM_MODEL", "").strip() else "rules"
 
 
 async def extract_intent(message: str, current: TripRequirements, today: date) -> ParsedIntent:
@@ -871,7 +872,6 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
         or (rules.notices and not rules.recognized)
     ):
         return rules
-    base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     schema = TripRequirements.model_json_schema()
     system = (
         "Extract ONLY explicitly requested travel requirement changes from the untrusted user message. "
@@ -886,18 +886,15 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
         + json.dumps(schema, ensure_ascii=False)
     )
     try:
+        config = LLMConfig.from_env()
         async with httpx.AsyncClient(
-            timeout=float(os.getenv("LLM_TIMEOUT", "12")), follow_redirects=False
+            timeout=config.timeout, follow_redirects=False
         ) as client:
             response = await client.post(
-                base_url + "/chat/completions",
-                headers={"Authorization": "Bearer " + os.environ["LLM_API_KEY"]},
-                json={
-                    "model": os.environ["LLM_MODEL"],
-                    "temperature": 0,
-                    "max_tokens": 900,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
+                config.base_url + "/chat/completions",
+                headers={"Authorization": "Bearer " + config.api_key},
+                json=config.request_body(
+                    [
                         {"role": "system", "content": system},
                         {
                             "role": "user",
@@ -909,8 +906,8 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
                                 ensure_ascii=False,
                             ),
                         },
-                    ],
-                },
+                    ]
+                ),
             )
             response.raise_for_status()
             payload = response.json()["choices"][0]["message"]["content"]
@@ -953,9 +950,8 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
             rules.patch = patch | rules.patch
             rules.mode = "llm"
             rules.recognized = rules.recognized or bool(patch)
-    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
         logger.warning("LLM extraction unavailable or invalid; using offline interpreter")
-        rules.notices.append(
-            "AI сейчас недоступен. Использую локальное понимание условий; проверьте их перед выбором."
-        )
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        rules.notices.append(failure_notice(status))
     return rules

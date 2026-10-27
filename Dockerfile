@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
     && mkdir -p /app/data \
     && chown -R oplan:oplan /app
 COPY --chown=oplan:oplan app ./app
+COPY --chown=oplan:oplan scripts ./scripts
 COPY --chown=oplan:oplan static ./static
 USER 10001:10001
 EXPOSE 8080
