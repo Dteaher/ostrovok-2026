@@ -38,9 +38,122 @@
   const arrow = () => node('span', { 'aria-hidden': 'true' }, '↗');
   const announce = text => { live.textContent = text; };
 
+  const TRIPS_KEY = 'rivane-trips-v1';
+  function closeNavigation() {
+    document.body.classList.remove('menu-open');
+    const toggle = document.querySelector('#mobile-menu');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Открыть навигацию');
+  }
+  const destinations = [
+    { name: 'Сочи', label: 'Сочи', image: 'sochi', description: 'Море · Набережные · Культура', prompt: 'В Сочи' },
+    { name: 'Адлер', label: 'Адлер', image: 'adler', description: 'Пляжи · Прогулки · Семья', prompt: 'В Адлере' },
+    { name: 'Хоста', label: 'Хоста', image: 'khosta', description: 'Тишина · Зелень · Море', prompt: 'В Хосту' },
+    { name: 'Сириус', label: 'Сириус', image: 'sirius', description: 'Побережье · Простор · Отдых', prompt: 'В Сириус' },
+    { name: 'Дагомыс', label: 'Дагомыс', image: 'dagomys', description: 'Природа · Спокойствие · Горы', prompt: 'В Дагомыс' },
+    { name: 'Лазаревское', label: 'Лазаревское', image: 'lazarevskoe', description: 'Пляжи · Зелёные холмы · Уют', prompt: 'В Лазаревское' }
+  ];
+
+  function icon(name, size = 22) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const paths = {
+      spark: 'm12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z M19 2v4 M17 4h4',
+      heart: 'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z',
+      people: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.9 M16 3.1a4 4 0 0 1 0 7.8 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+      sea: 'M2 18c2-3 4 3 6 0s4 3 6 0 4 3 8 0 M2 22c2-3 4 3 6 0s4 3 6 0 4 3 8 0 M12 3v11 M5 8l7-5 7 5',
+      mountain: 'M2 21 10 5l9 16Z M12 9l3-6 7 18 M7 11l3 2 3-2',
+      arrow: 'M3 12h18 M15 6l6 6-6 6',
+      close: 'm6 6 12 12 M6 18 18 6',
+      bag: 'M4 7h16v14H4Z M9 7V3h6v4 M9 11v6 M15 11v6',
+      check: 'm4 12 5 5L20 6'
+    };
+    for (const [key, value] of Object.entries({ width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(key, value);
+    const path = document.createElementNS(svg.namespaceURI, 'path');
+    path.setAttribute('d', paths[name] || paths.arrow);
+    svg.append(path);
+    return svg;
+  }
+
+  function savedTrips() {
+    try {
+      const values = JSON.parse(localStorage.getItem(TRIPS_KEY) || '[]');
+      return Array.isArray(values) ? values.filter(item => item && typeof item.id === 'string').slice(0, 20) : [];
+    } catch { return []; }
+  }
+
+  function rememberTrip(session) {
+    const plan = session.order?.plan || session.selected_plan || session.plans?.[0];
+    const entry = { id: session.id, destination: session.requirements.destination || 'Новое путешествие', date: session.requirements.check_in, stage: session.stage, title: plan?.hotel.name || 'Ваш персональный подбор', total: session.order?.total || plan?.price.total || null };
+    try { localStorage.setItem(TRIPS_KEY, JSON.stringify([entry, ...savedTrips().filter(item => item.id !== entry.id)].slice(0, 20))); } catch { /* History is optional; API state still persists. */ }
+  }
+
+  function futureDate(days = 14) {
+    const value = new Date();
+    value.setDate(value.getDate() + days);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+
+  function seedIdea(message) {
+    if (state.pending) return;
+    if (state.session) resetTrip();
+    state.draft = message;
+    render();
+    const input = document.querySelector('#trip-message');
+    input?.focus({ preventScroll: true });
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    announce('Идея добавлена в запрос. Уточните пожелания и спланируйте путешествие.');
+  }
+
+  function navigateSection(id) {
+    if (state.pending) return;
+    if (state.session) resetTrip();
+    closeNavigation();
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function showTrips() {
+    if (state.pending) return;
+    closeNavigation();
+    const dialog = node('dialog', { class: 'trips-dialog', 'aria-labelledby': 'trips-title' });
+    const list = node('div', { class: 'saved-trip-list' });
+    const notice = node('p', { class: 'saved-trip-error', role: 'status' });
+    const close = () => dialog.close();
+    const trips = savedTrips();
+    dialog.append(node('div', { class: 'dialog-heading' }, node('div', {}, smallLabel('Вернёмся к вашим планам'), node('h2', { id: 'trips-title' }, 'Мои поездки')), button(icon('close'), close, 'dialog-close', { 'aria-label': 'Закрыть мои поездки' })), node('p', { class: 'dialog-description' }, 'Сохранённые подборы и демозаказы в этом браузере.'), notice, list);
+    if (!trips.length) list.append(node('div', { class: 'trips-empty' }, icon('bag', 40), node('h3', {}, 'Ваша первая история ещё впереди'), node('p', {}, 'Расскажите об отдыхе — здесь останутся ваши подборы и планы.'), button('Начать путешествие', () => { close(); seedIdea(''); }, 'button')));
+    trips.forEach(trip => {
+      const action = button(node('span', { class: 'saved-trip-inner' }, node('span', {}, node('span', { class: 'saved-trip-status' }, trip.stage === 'booked' ? 'Демозаказ оформлен' : 'Подбор сохранён'), node('strong', {}, trip.destination), node('span', {}, `${trip.title} · ${date(trip.date)}`)), node('span', { class: 'saved-trip-price' }, trip.total ? money(trip.total) : 'Продолжить', icon('arrow'))), async () => {
+        list.querySelectorAll('button').forEach(control => { control.disabled = true; });
+        notice.textContent = 'Возвращаем ваш план…';
+        try {
+          const restored = await request(`/api/sessions/${encodeURIComponent(trip.id)}`);
+          if (!dialog.open || !dialog.isConnected) return;
+          if (state.session?.id !== restored.id) state.checkout = { name: '', email: '', accepted: false };
+          state.session = restored;
+          state.error = ''; state.draft = ''; state.showResults = false;
+          saveSession(); close(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+          document.querySelector('[data-view-heading]')?.focus();
+        } catch (error) {
+          if (dialog.open) notice.textContent = error.status === 404 ? 'Этот подбор больше недоступен. Начните новую поездку.' : error.message;
+        } finally { list.querySelectorAll('button').forEach(control => { control.disabled = false; }); }
+      }, 'saved-trip-button');
+      list.append(action);
+    });
+    dialog.addEventListener('click', event => { if (event.target === dialog) close(); });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      if (document.activeElement === document.body) {
+        const toggle = document.querySelector('#mobile-menu');
+        (toggle.getClientRects().length ? toggle : document.querySelector('#trips-link')).focus();
+      }
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
   function saveSession() {
     try {
-      if (state.session) localStorage.setItem(STORAGE_KEY, state.session.id);
+      if (state.session) { localStorage.setItem(STORAGE_KEY, state.session.id); rememberTrip(state.session); }
       else localStorage.removeItem(STORAGE_KEY);
     } catch { /* The current trip still works when browser storage is unavailable. */ }
   }
@@ -100,7 +213,7 @@
     const submit = main.querySelector('.composer-submit');
     if (submit) {
       submit.classList.toggle('is-loading', pending);
-      submit.textContent = pending ? 'Собираем план…' : state.session ? 'Обновить план ↗' : 'Собрать поездку ↗';
+      submit.textContent = pending ? 'Планируем путешествие…' : state.session ? 'Обновить план ↗' : 'Спланировать путешествие →';
     }
     const checkout = main.querySelector('.checkout-submit');
     if (checkout && pending) checkout.textContent = 'Создаём демозаявку…';
@@ -133,40 +246,63 @@
 
   function composer(compact = false) {
     const input = node('textarea', {
-      id: compact ? 'refine-message' : 'trip-message', name: 'message', rows: compact ? 2 : 3,
+      id: compact ? 'refine-message' : 'trip-message', name: 'message', rows: 2,
       maxlength: '3000', required: true, 'aria-label': compact ? 'Что изменить в поездке' : 'Расскажите о своей поездке',
-      placeholder: compact ? 'Например: «А если на 2 ночи меньше и с бассейном?»' : 'Например: в Сочи на неделю вдвоём, до 150 тысяч. Хочется завтраки, тишину и море рядом.',
+      placeholder: compact ? 'Например: «А если на 2 ночи меньше и с бассейном?»' : 'Куда вы хотите отправиться? Например: «Хочу в Сочи на неделю, с красивым отелем, завтраками и бюджетом до 160 000 ₽ на двоих»',
       oninput: event => { state.draft = event.target.value; },
       onkeydown: event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); sendMessage(input.value); } }
     });
     input.value = state.draft;
-    return node('form', { class: `composer ${compact ? 'composer-compact' : ''}`, onsubmit: event => { event.preventDefault(); sendMessage(input.value); } },
+    return node('form', { class: `composer ${compact ? 'composer-compact' : 'hero-composer'}`, onsubmit: event => { event.preventDefault(); sendMessage(input.value); } },
+      !compact ? node('span', { class: 'composer-emblem' }, icon('spark', 26)) : null,
       node('label', { for: input.id, class: 'composer-label' }, compact ? 'Давайте сделаем план ещё ближе к вам' : 'Какую поездку вы задумали?'),
       input,
       node('div', { class: 'composer-bottom' }, node('span', { class: 'composer-hint' }, compact ? 'Остальные пожелания сохраним' : 'Куда, когда, с кем и что для вас важно'),
-        node('button', { type: 'submit', class: 'button composer-submit' }, compact ? 'Обновить план ↗' : 'Собрать поездку ↗')));
+        node('button', { type: 'submit', class: 'button composer-submit' }, compact ? 'Обновить план ↗' : node('span', {}, 'Спланировать путешествие', icon('arrow')))));
   }
 
   function landing() {
-    const prompts = state.config?.examples?.length ? state.config.examples.slice(0, 3) : examples;
+    const prompts = state.config?.examples?.length ? state.config.examples : examples;
+    const themes = [
+      ['heart', 'Романтическая поездка', prompts[0]],
+      ['people', 'Семейный отдых', prompts[2]],
+      ['sea', 'Выходные у моря', prompts[1]],
+      ['mountain', 'Горы и природа', `В Дагомыс с ${futureDate()} на 5 ночей вдвоём, тихое место, до 130 тысяч, с завтраком`]
+    ];
+    const steps = [
+      ['01', 'Одно желание', 'Расскажите о вашем отдыхе. Обычными словами, без десятка фильтров.'],
+      ['02', 'Подбор с объяснением', 'Сравните подходящие отели, полную стоимость и важные компромиссы.'],
+      ['03', 'План под вас', 'Измените пожелания одной фразой. Остальные условия сохранятся.'],
+      ['04', 'Всё в одном месте', 'Проверьте поездку и завершите демонстрационное оформление.']
+    ];
     return node('div', { class: 'landing enter' },
-      node('section', { class: 'hero', 'aria-labelledby': 'hero-title' },
-        node('div', { class: 'hero-content' }, smallLabel('Хорошая поездка начинается с желания'),
-          node('h1', { id: 'hero-title', tabindex: '-1', 'data-view-heading': true }, 'Вы мечтаете.', node('br'), node('span', {}, 'Остальное — план.')),
-          node('p', { class: 'hero-description' }, 'Расскажите, как хотите отдохнуть. Мы соберём дорогу, отель и полную стоимость — в одну понятную поездку.'),
-          composer(),
-          node('p', { class: 'parser-note' }, parserNote())),
-        node('figure', { class: 'hero-art' }, node('img', { src: '/static/media/coast.svg', alt: 'Иллюстрация черноморского побережья: горы, тёплое море и маленький парусник', width: 900, height: 1100 }),
-          node('figcaption', {}, node('span', {}, 'Чуть ближе к морю'), node('span', { class: 'art-coordinate' }, '43°35′ с. ш. / 39°43′ в. д.')))),
-      node('section', { class: 'examples', 'aria-label': 'Примеры запросов' },
-        smallLabel('Или начните с идеи'),
-        node('div', { class: 'example-grid' }, prompts.map((prompt, index) => button(node('span', {}, node('span', { class: 'example-number' }, `0${index + 1}`), node('span', {}, prompt), arrow()), () => sendMessage(prompt), 'example-button')))),
-      node('section', { class: 'how', id: 'how', 'aria-labelledby': 'how-title' },
-        node('div', {}, smallLabel('Без десятков вкладок'), node('h2', { id: 'how-title' }, 'От «хочу к морю»', node('br'), 'до «всё продумано».')),
-        node('ol', {}, node('li', {}, node('strong', {}, 'Расскажите о главном'), node('p', {}, 'О желаниях, бюджете, спутниках. Обычными словами.')),
-          node('li', {}, node('strong', {}, 'Выберите свой вариант'), node('p', {}, 'Сравните полную стоимость, преимущества и компромиссы.')),
-          node('li', {}, node('strong', {}, 'Поменяйте одной фразой'), node('p', {}, 'Уточните пожелания — мы пересоберём поездку, сохранив остальное.')))),
-      node('p', { class: 'demo-footnote' }, 'Сейчас работаем с демонстрационным каталогом Сочи. Отели, наличие мест и цены учебные. Оформление создаёт демозаявку без оплаты.'));
+      node('section', { class: 'lux-hero', 'aria-labelledby': 'hero-title' },
+        node('img', { class: 'lux-hero-image', src: '/static/media/rivane/hero.webp', alt: 'Закат над морским побережьем и панорамный бассейн в Каше, Турция. Атмосферная фотография.', width: 2000, height: 1334, fetchpriority: 'high' }),
+        node('div', { class: 'lux-hero-shade' }),
+        node('div', { class: 'lux-hero-inner wrap' },
+          node('div', { class: 'lux-intro' }, smallLabel('Больше, чем просто отели'),
+            node('h1', { id: 'hero-title', tabindex: '-1', 'data-view-heading': true }, 'Путешествия,', node('br'), 'которые начинаются', node('br'), node('em', {}, 'с одного желания')),
+            node('p', { class: 'lux-description' }, 'Расскажите, каким вы представляете свой отдых. ', node('span', {}, 'O!RIVANE поможет выбрать направление, сравнит варианты и составит персональный план путешествия.'))),
+          node('aside', { class: 'hero-manifesto', 'aria-label': 'Наш подход' }, smallLabel('Откройте больше возможностей'),
+            node('p', { class: 'manifesto-quote' }, 'Больше, чем', node('br'), 'выбор отеля.', node('br'), node('em', {}, 'Ближе к вашему'), node('br'), 'отдыху.'),
+            node('span', { class: 'manifesto-rule' }),
+            node('div', { class: 'hero-facts' }, node('div', {}, node('strong', {}, '20'), node('span', {}, 'демоотелей')), node('div', {}, node('strong', {}, '6'), node('span', {}, 'районов Сочи')))),
+          node('div', { class: 'lux-search' }, composer(),
+            node('div', { class: 'theme-chips', id: 'inspiration', 'aria-label': 'Идеи для путешествия' }, themes.map(([name, label, prompt]) => button(node('span', {}, icon(name), label), () => sendMessage(prompt), 'example-button theme-chip'))),
+            node('p', { class: 'hero-demo-note' }, 'Подбираем по демонстрационному каталогу Большого Сочи. Без реальной оплаты и бронирования.'))),
+        node('p', { class: 'hero-photo-credit' }, 'Атмосфера путешествий · Каш, Турция')),
+      node('section', { class: 'destinations-section wrap', id: 'destinations', 'aria-labelledby': 'destinations-title' },
+        node('div', { class: 'destination-heading' }, node('div', {}, smallLabel('Откройте Большой Сочи'), node('h2', { id: 'destinations-title' }, 'Идеи для вашего следующего путешествия')),
+          button(node('span', {}, 'Помогите выбрать', icon('arrow')), () => seedIdea('Хочу в Большой Сочи, но пока не знаю, какой район выбрать. Важны море и спокойный отдых.'), 'outline-button')),
+        node('div', { class: 'destination-grid' }, destinations.map(destination => button(node('span', { class: 'destination-card-content' },
+          node('img', { src: `/static/media/rivane/${destination.image}.webp`, alt: '', width: 600, height: 500, loading: 'lazy' }),
+          node('span', { class: 'destination-copy' }, node('span', { class: 'destination-name' }, destination.label), node('span', { class: 'destination-description' }, destination.description)),
+          node('span', { class: 'destination-arrow' }, icon('arrow'))), () => seedIdea(`${destination.prompt} с ${futureDate()} на неделю вдвоём, до 160 тысяч, с завтраком`), 'destination-card', { 'aria-label': `Спланировать отдых: ${destination.name}` }))),
+        node('p', { class: 'destination-note' }, 'Один регион — разные впечатления. Фотографии районов иллюстративные. Отели, наличие и цены в подборе демонстрационные.')),
+      node('section', { class: 'journey-section wrap', id: 'how', 'aria-labelledby': 'how-title' },
+        node('div', { class: 'journey-heading' }, smallLabel('Всё сложится в путешествие'), node('h2', { id: 'how-title' }, 'От первого «хочу»', node('em', {}, ' до вашего плана.'))),
+        node('ol', { class: 'journey-steps' }, steps.map(([number, title, description]) => node('li', {}, node('span', { class: 'step-number' }, number), node('h3', {}, title), node('p', {}, description)))),
+        node('p', { class: 'journey-parser-note' }, parserNote())));
   }
 
   function conditions(requirements) {
@@ -205,11 +341,12 @@
 
   function hotelCard(plan, index) {
     const hotel = plan.hotel;
-    const imagePath = typeof hotel.image === 'string' && hotel.image.startsWith('/static/') ? hotel.image : '/static/media/coast.svg';
+    const destination = destinations.find(item => item.name === hotel.area) || destinations.find(item => hotel.area.includes(item.name)) || destinations[index % destinations.length];
+    const imagePath = `/static/media/rivane/${destination.image}.webp`;
     const badge = state.session.plan_labels?.[plan.id] || (index === 0 ? 'Подходит вашим условиям' : null);
     return node('article', { class: 'hotel-card' },
       node('div', { class: `hotel-image hotel-image-${index}` }, node('img', { src: imagePath, alt: '', loading: 'lazy', width: 900, height: 1100 }),
-        node('span', { class: 'image-note' }, 'Иллюстрация · демокаталог'), badge ? node('span', { class: 'recommendation' }, badge) : null),
+        node('span', { class: 'image-note' }, 'Атмосфера региона · демоотель'), badge ? node('span', { class: 'recommendation' }, badge) : null),
       node('div', { class: 'hotel-body' },
         node('div', { class: 'hotel-meta' }, node('span', {}, hotel.area || 'Сочи', hotel.stars ? ` · ${hotel.stars}★` : ''), node('span', { class: 'rating' }, hotel.rating ? String(hotel.rating).replace('.', ',') : '—', node('span', { class: 'sr-only' }, ' — оценка отеля'))),
         node('h3', {}, hotel.name),
@@ -313,7 +450,7 @@
     const order = state.session.order;
     if (!order) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify(order, null, 2)], { type: 'application/json;charset=utf-8' }));
-    const link = node('a', { href: url, download: `oplan-${String(order.reference).replace(/[^a-zA-Z0-9А-Яа-я_-]/g, '')}.json` });
+    const link = node('a', { href: url, download: `rivane-${String(order.reference).replace(/[^a-zA-Z0-9А-Яа-я_-]/g, '')}.json` });
     document.body.append(link);
     link.click();
     link.remove();
@@ -338,7 +475,7 @@
     const messages = state.session.messages || [];
     if (!messages.length) return null;
     return node('details', { class: 'history' }, node('summary', {}, 'История пожеланий', node('span', { 'aria-hidden': 'true' }, ' +')),
-      node('ol', {}, messages.map(message => node('li', { class: message.role === 'user' ? 'history-user' : 'history-assistant' }, node('strong', {}, message.role === 'user' ? 'Вы' : 'О!План'), node('p', {}, message.content)))));
+      node('ol', {}, messages.map(message => node('li', { class: message.role === 'user' ? 'history-user' : 'history-assistant' }, node('strong', {}, message.role === 'user' ? 'Вы' : 'O!RIVANE'), node('p', {}, message.content)))));
   }
 
   function render() {
@@ -347,7 +484,8 @@
     document.body.classList.toggle('has-session', Boolean(state.session));
     newTrip.hidden = !state.session;
     newTrip.disabled = state.pending;
-    document.querySelector('#how-link').hidden = Boolean(state.session);
+    document.querySelector('#how-link').hidden = false;
+    closeNavigation();
     if (state.error) main.append(renderError());
     if (state.restoring) main.append(node('section', { class: 'restore-state', role: 'status' }, smallLabel('Возвращаемся к вашим планам'), node('h1', {}, 'Ваша поездка уже рядом.'), node('p', {}, 'Загружаем сохранённые пожелания и маршрут…')));
     else if (!state.session) main.append(landing());
@@ -374,6 +512,12 @@
   }
 
   newTrip.addEventListener('click', resetTrip);
+  document.querySelector('#home-link').addEventListener('click', event => { event.preventDefault(); resetTrip(); });
+  document.querySelectorAll('[data-section]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); navigateSection(link.dataset.section); }));
+  document.querySelector('#trips-link').addEventListener('click', showTrips);
+  document.querySelector('#search-trip').addEventListener('click', () => { if (!state.pending) { if (state.session) resetTrip(); document.querySelector('#trip-message')?.focus(); } });
+  document.querySelector('#mobile-menu').addEventListener('click', event => { if (state.pending) return; const open = document.body.classList.toggle('menu-open'); event.currentTarget.setAttribute('aria-expanded', String(open)); event.currentTarget.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию'); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeNavigation(); });
   async function boot() {
     let sessionId;
     try { sessionId = localStorage.getItem(STORAGE_KEY); } catch { /* Storage is optional. */ }
@@ -384,7 +528,7 @@
       sessionId ? request(`/api/sessions/${encodeURIComponent(sessionId)}`) : Promise.resolve(null)
     ]);
     if (results[0].status === 'fulfilled') state.config = results[0].value;
-    if (results[1].status === 'fulfilled') state.session = results[1].value;
+    if (results[1].status === 'fulfilled') { state.session = results[1].value; if (state.session) rememberTrip(state.session); }
     else {
       state.error = results[1].reason.status === 404 ? 'Предыдущая поездка больше недоступна. Расскажите о ней ещё раз — соберём новый план.' : 'Не удалось восстановить поездку. Обновите страницу, чтобы попробовать снова.';
       if (results[1].reason.status === 404) saveSession();

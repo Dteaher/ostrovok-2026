@@ -1,4 +1,4 @@
-# О!План contract
+# O!RIVANE contract
 
 All JSON UTF-8. Currency integer RUB, prices for everyone for the entire trip. Dates ISO 8601. Demo inventory version `sochi-demo-v1`.
 
@@ -25,4 +25,4 @@ Response Session: {id,revision:int,stage:"clarify"|"results"|"selected"|"booked"
 Errors JSON `{detail:string}` with 404 missing session/plan, 409 stale revision, 422 invalid input. Frontend must show recovery, not fake success. Use textContent or safe escaping; no untrusted innerHTML.
 
 ## UX
-Brand О!План, a calm contemporary travel product; all visible copy Russian. One clear opening free-text action; no dashboard or filter wall. At most 3 distinct hotel plan options, coherent total prices, concise reasons and honest compromises. Conversation with visible retained conditions, selected trip details, explicit demo checkout, downloadable order through browser-generated JSON. Respect keyboard and reduced motion. External calls must not be required to render the app. No placeholder actions.
+Brand O!RIVANE, a premium contemporary travel product; all visible copy Russian. One clear opening free-text action; no dashboard or filter wall. At most 3 distinct hotel plan options, coherent total prices, concise reasons and honest compromises. Conversation with visible retained conditions, selected trip details, explicit demo checkout, downloadable order through browser-generated JSON. Respect keyboard and reduced motion. External calls must not be required to render the app. No placeholder actions. Saved-trip navigation stores capability IDs and display metadata locally and restores through the existing GET session endpoint; it does not imply an account or change the API/state schema. Legacy `oplan-session-v1` stays supported to preserve existing sessions.

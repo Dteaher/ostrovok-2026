@@ -1,0 +1,113 @@
+{
+  "verified_on": "2026-10-27",
+  "hero": "hero.webp",
+  "destination_mapping": {
+    "Сочи Центр": "sochi.webp",
+    "Адлер": "adler.webp",
+    "Хоста": "khosta.webp",
+    "Сириус": "sirius.webp",
+    "Дагомыс": "dagomys.webp",
+    "Лазаревское": "lazarevskoe.webp"
+  },
+  "disclosure_ru": "Фотографии передают атмосферу отдыха. Изображения районов могут быть иллюстративными.",
+  "assets": [
+    {
+      "file": "hero.webp",
+      "role": "hero",
+      "author": "Ahmet ÇÖTÜR",
+      "source": "https://www.pexels.com/photo/infinity-pool-and-patio-of-a-mountain-resort-20975726/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "depicts": "Villa patio and infinity pool, Kaş, Turkey",
+      "usage": "Atmospheric travel inspiration; not a Sochi hotel or destination photograph.",
+      "width": 2000,
+      "height": 1334,
+      "bytes": 332478,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    },
+    {
+      "file": "sochi.webp",
+      "destination": "Сочи Центр",
+      "author": "Alexey Elfimov",
+      "source": "https://unsplash.com/photos/a-bunch-of-boats-that-are-in-the-water-FnBRPxmYUuE",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "depicts": "Sochi marine terminal, per photographer caption",
+      "usage": "Actual Sochi regional photograph; no hotel identity implied.",
+      "width": 600,
+      "height": 500,
+      "bytes": 39552,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    },
+    {
+      "file": "adler.webp",
+      "destination": "Адлер",
+      "author": "Dmitriy (tiqwerosado)",
+      "source": "https://unsplash.com/photos/palm-trees-during-daytime-AqyjpvoSjcA",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "depicts": "Palm trees in Sochi, per source location",
+      "usage": "Regional atmospheric illustration; exact district not verified.",
+      "width": 600,
+      "height": 500,
+      "bytes": 60546,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    },
+    {
+      "file": "khosta.webp",
+      "destination": "Хоста",
+      "author": "Julia Ustinova",
+      "source": "https://www.pexels.com/photo/waterfall-cascading-down-the-rocky-cliff-in-a-forest-20189223/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "depicts": "Waterfall in Sochi, per source location",
+      "usage": "Regional atmospheric illustration; exact district not verified.",
+      "width": 600,
+      "height": 500,
+      "bytes": 99148,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    },
+    {
+      "file": "sirius.webp",
+      "destination": "Сириус",
+      "author": "Dmitry Grachyov",
+      "source": "https://unsplash.com/photos/two-palm-trees-frame-a-mountain-at-sunset-OVAYRJRngyg",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "depicts": "Mountain framed by palm trees in Sochi, per source location",
+      "usage": "Regional atmospheric illustration; exact district not verified.",
+      "width": 600,
+      "height": 500,
+      "bytes": 46600,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    },
+    {
+      "file": "dagomys.webp",
+      "destination": "Дагомыс",
+      "author": "Roman Petrov (credited on source page; download filename now references Romain Water)",
+      "source": "https://unsplash.com/photos/a-palm-tree-in-the-middle-of-a-park-kL5gctTaIMs",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "depicts": "Palm tree in a Sochi park, per source location",
+      "usage": "Regional atmospheric illustration; exact district not verified.",
+      "width": 600,
+      "height": 500,
+      "bytes": 87340,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    },
+    {
+      "file": "lazarevskoe.webp",
+      "destination": "Лазаревское",
+      "author": "Bestalex",
+      "source": "https://commons.wikimedia.org/wiki/File:Beach_in_Lazarevskoye,_Sochi.jpg",
+      "license": "CC0 1.0 Universal",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "depicts": "Beach in Lazarevskoye, Sochi (source dated 21 August 2020)",
+      "usage": "Actual destination photograph; no hotel identity implied.",
+      "width": 600,
+      "height": 500,
+      "bytes": 53974,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery."
+    }
+  ]
+}

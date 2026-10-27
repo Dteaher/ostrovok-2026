@@ -54,7 +54,7 @@ def run():
             expect(target_page.locator("#main")).to_have_attribute("aria-busy", "false")
 
         page.goto(base)
-        expect(page.locator(".example-button")).to_have_count(3)
+        expect(page.locator(".example-button")).to_have_count(4)
         page.screenshot(path=str(output / "ui-desktop.png"), full_page=True)
         act(page, lambda: page.locator(".example-button").first.click())
         expect(page.locator(".hotel-card")).to_have_count(3)
@@ -126,7 +126,7 @@ def run():
         mobile_page = mobile.new_page()
         mobile_page.on("pageerror", lambda error: errors.append(str(error)))
         mobile_page.goto(base)
-        expect(mobile_page.locator(".example-button")).to_have_count(3)
+        expect(mobile_page.locator(".example-button")).to_have_count(4)
         mobile_page.screenshot(path=str(output / "ui-mobile.png"), full_page=True)
         act(mobile_page, lambda: mobile_page.locator(".example-button").first.click())
         expect(mobile_page.locator(".hotel-card")).to_have_count(3)

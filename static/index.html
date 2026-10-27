@@ -3,22 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f5ef">
-  <meta name="description" content="Опишите поездку своими словами. О!План соберёт маршрут, отель и полную стоимость в один понятный план.">
-  <title>О!План — от мысли до поездки</title>
+  <meta name="theme-color" content="#102533">
+  <meta name="description" content="O!RIVANE — персональный план путешествия с одного желания. Подбор отеля, сравнение вариантов и демонстрационное оформление.">
+  <title>O!RIVANE — путешествия с одного желания</title>
   <link rel="icon" href="/static/media/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/rivane.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">К содержимому</a>
   <header class="site-header wrap">
-    <a class="brand" href="/" aria-label="О!План — на главную">О<span>!</span>План<span class="brand-dot">.</span></a>
-    <span class="brand-caption">От мысли до поездки</span>
-    <nav aria-label="Главное меню"><a href="#how" id="how-link">Как это работает <span aria-hidden="true">↗</span></a><button class="text-button" id="new-trip" hidden>Новая поездка <span aria-hidden="true">↗</span></button></nav>
+    <a class="brand" id="home-link" href="/" aria-label="O!RIVANE — на главную"><span class="brand-name"><span>O!</span>RIVANE</span><span class="brand-caption">AI TRAVEL CONCIERGE</span></a>
+    <nav class="main-nav" aria-label="Главное меню">
+      <a href="#how" id="how-link" data-section="how">Как это работает</a>
+      <a href="#destinations" data-section="destinations">Направления</a>
+      <a href="#inspiration" data-section="inspiration">Вдохновение</a>
+      <button type="button" id="trips-link">Мои поездки</button>
+    </nav>
+    <div class="header-actions"><button type="button" class="header-search" id="search-trip" aria-label="Перейти к запросу путешествия"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg></button><button type="button" class="header-new" id="new-trip" hidden>Новая поездка <span aria-hidden="true">↗</span></button><button type="button" id="mobile-menu" class="menu-toggle" aria-label="Открыть навигацию" aria-expanded="false"><span></span><span></span></button></div>
   </header>
   <main id="main" class="wrap" tabindex="-1"></main>
-  <footer class="site-footer wrap"><span>О!План <span aria-hidden="true">·</span> Меньше вкладок. Больше моря.</span><span>Демонстрация сервиса. Без реальных бронирований и списаний.</span></footer>
+  <footer class="site-footer wrap"><span class="footer-brand">O!RIVANE <span>С одного желания.</span></span><span>Демонстрационный каталог. Без реальных бронирований и списаний.</span></footer>
   <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
