@@ -42,9 +42,11 @@ NUMBERS = {
     "две": 2,
     "двух": 2,
     "двое": 2,
+    "двоих": 2,
     "три": 3,
     "трех": 3,
     "трое": 3,
+    "троих": 3,
     "четыре": 4,
     "четырех": 4,
     "четверо": 4,
@@ -60,6 +62,7 @@ NUMBERS = {
     "четырнадцать": 14,
 }
 NUMBER = r"(?:\d{1,2}|" + "|".join(NUMBERS) + ")"
+RATING_PATTERN = r"рейтинг[а-я]*\s*(?:от|не ниже|>=)?\s*(\d+(?:[.,]\d+)?)(?!\d|[.,]\d)"
 ALLOWED_PATCH = set(TripRequirements.model_fields) - {"assumptions", "unsupported"}
 
 # A language model may understand synonyms, but it may not opportunistically
@@ -86,6 +89,16 @@ FIELD_EVIDENCE = {
     "min_rating": r"рейтинг|оценк|отзыв",
     "stars": r"звезд|[1-5]\s*\*",
 }
+PREFERENCE_LABELS = {
+    "breakfast": "Завтрак",
+    "pool": "Бассейн",
+    "refundable": "Бесплатная отмена",
+    "quiet": "Тишина",
+    "direct_only": "Прямой рейс",
+    "max_beach_m": "Расстояние до пляжа",
+    "min_rating": "Минимальный рейтинг",
+    "stars": "Число звёзд",
+}
 
 
 @dataclass
@@ -97,6 +110,10 @@ class ParsedIntent:
     month_hint: int | None = None
     mode: str = "rules"
     price_question: str | None = None
+    keep_hotel: bool = False
+    release_hotel: bool = False
+    hypothetical: bool = False
+    hypothetical_patch: dict | None = None
 
 
 def count(value: str) -> int:
@@ -212,10 +229,14 @@ def parse_dates(text: str, current: TripRequirements, today: date, result: Parse
     month_match = re.search(MONTH_PATTERN, text)
     if month_match:
         result.month_hint = month_number(month_match[0])
-    nights = re.search(rf"(?:на\s*)?({NUMBER})\s*(ноч[а-я]*|дн[а-я]*)", text)
-    if nights and not re.search(r"позже|раньше|через", text):
+    duration_text = re.sub(
+        rf"(?:на\s*)?({NUMBER})\s*дн[а-я]*\s*(?:позже|раньше)|через\s*({NUMBER})\s*(?:дн[а-я]*|недел[а-я]*)",
+        "", text,
+    )
+    nights = re.search(rf"(?:на\s*)?({NUMBER})\s*(ноч[а-я]*|дн[а-я]*)", duration_text)
+    if nights:
         duration_change = re.search(
-            rf"({NUMBER})\s*(?:ноч[а-я]*|дн[а-я]*)\s*(меньше|больше|дольше|короче)", text
+            rf"({NUMBER})\s*(?:ноч[а-я]*|дн[а-я]*)\s*(меньше|больше|дольше|короче)", duration_text
         )
         if duration_change:
             direction = -1 if duration_change[2] in {"меньше", "короче"} else 1
@@ -232,9 +253,40 @@ def parse_dates(text: str, current: TripRequirements, today: date, result: Parse
         patch["nights"] = 7
     elif re.search(r"уик[еэ]нд|выходны", text) and "nights" not in patch:
         patch["nights"] = 2
+    shortened = re.search(
+        rf"(?:сократ[а-я]*|укорот[а-я]*|уменьш[а-я]*)\s*(?:поездк[а-я]*|отдых|длительность)?\s*на\s*(?:({NUMBER})\s*)?(день|дня|дней|ночь|ночи|ночей)\b",
+        text,
+    )
+    if shortened:
+        patch["nights"] = current.nights - (count(shortened[1]) if shortened[1] else 1)
 
 
-def parse_budget(text: str, current: TripRequirements, result: ParsedIntent) -> None:
+def parse_budget(text: str, current: TripRequirements, result: ParsedIntent) -> bool:
+    clauses = re.split(r"[,;.!?]|\s+(?:и|но)\s+", text)
+    preserve_pattern = r"тот же|остав[а-я]*|сохран[а-я]*|не меня[а-я]*|без изменений"
+    preserved = any(
+        "бюджет" in clause
+        and re.search(preserve_pattern, clause)
+        for clause in clauses
+    )
+    if preserved:
+        for clause in clauses:
+            explicit_budget = (
+                "бюджет" in clause and re.search(r"\d", clause)
+            ) or re.search(r"^\s*до\s*\d", clause)
+            if not explicit_budget:
+                continue
+            proposal = ParsedIntent()
+            parse_budget(re.sub(preserve_pattern, "", clause), current, proposal)
+            if proposal.patch.get("budget", current.budget) != current.budget:
+                result.patch.clear()
+                result.questions.append({
+                    "field": "budget",
+                    "question": "Бюджет: сохранить прежнюю сумму или задать новую? В сообщении указаны разные условия.",
+                    "options": [],
+                })
+                return True
+        return False
     amount = re.search(
         r"(\d[\d\s]*(?:[.,]\d+)?)\s*(тыс[а-я.]*|[кk]\b|млн[а-я.]*|₽|руб[а-я.]*)", text
     )
@@ -275,6 +327,7 @@ def parse_budget(text: str, current: TripRequirements, result: ParsedIntent) -> 
         result.patch["budget_scope"] = "hotel"
     elif re.search(r"на всю поездку|общий бюджет|включая (?:перелет|дорогу)", text):
         result.patch["budget_scope"] = "trip"
+    return False
 
 
 def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> None:
@@ -322,6 +375,49 @@ def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> 
     repeated_children = len(
         re.findall(r"ребен[а-я]*|доч[ьи][а-я]*|дочер[а-я]*|сын[а-я]*|внук[а-я]*|внуч[а-я]*", text)
     )
+    additional = re.search(
+        rf"\b(?:добавь|добавить|добавим|еще)\s+(?:еще\s+)?(?:({NUMBER})\s+)?(ребен[а-я]*|дет[а-я]*)",
+        text,
+    )
+    if additional:
+        new_ages = result.patch.pop("children_ages", [])
+        additional_count = (
+            count(additional[1]) if additional[1]
+            else max(1, repeated_children) if additional[2].startswith("ребен")
+            else len(new_ages) or None
+        )
+        result.questions = [q for q in result.questions if q["field"] != "children_ages"]
+        if new_ages and len(new_ages) == additional_count:
+            result.patch["children_ages"] = list(current.children_ages) + new_ages
+        else:
+            question = {
+                "field": "children_ages",
+                "question": "Сколько лет каждому добавляемому ребёнку на момент поездки? Возраст уже указанных детей сохраню.",
+                "options": [],
+                "existing_ages": list(current.children_ages),
+            }
+            if additional_count is not None:
+                question.update(
+                    additional_count=additional_count,
+                    expected_count=len(current.children_ages) + additional_count,
+                )
+            else:
+                question["question"] = "Сколько детей добавляем и сколько лет каждому на момент поездки?"
+            result.questions.append(question)
+        return
+    if (
+        len(current.children_ages) > 1
+        and "children_ages" in result.patch
+        and len(result.patch["children_ages"]) < len(current.children_ages)
+        and not child_count
+    ):
+        result.patch.pop("children_ages")
+        result.questions.append({
+            "field": "children_ages",
+            "question": "Укажите возраст каждого ребёнка на момент поездки. По одному возрасту нельзя определить, какие данные обновить.",
+            "expected_count": len(current.children_ages),
+            "options": [],
+        })
     if (
         child_count
         and "children_ages" in result.patch
@@ -344,6 +440,15 @@ def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> 
                 "options": [],
             }
         )
+    expected_count = max(count(child_count[1]) if child_count else 0, repeated_children)
+    if expected_count:
+        for question in result.questions:
+            if question["field"] == "children_ages":
+                question.setdefault("expected_count", expected_count)
+                question["options"] = [
+                    option for option in question["options"]
+                    if len(option["value"]) == expected_count
+                ]
     if "children_ages" in result.patch and re.search(r"включая|из них|в том числе", text):
         total_people = re.search(rf"нас\s*({NUMBER})", text)
         if total_people and not adults:
@@ -353,7 +458,7 @@ def parse_guests(text: str, current: TripRequirements, result: ParsedIntent) -> 
             result.patch["adults"] = adult_count
 
 
-def parse_preferences(text: str, result: ParsedIntent) -> None:
+def parse_preferences(text: str, result: ParsedIntent, current: TripRequirements) -> bool:
     patterns = {
         "breakfast": (
             r"без завтрак|завтрак[а-я]* (?:необязател|не обязател|не нужен|убер)|уб[её]ри завтрак|не (?:хочу|нуж[а-я]*)\s*(?:с\s*)?завтрак",
@@ -361,7 +466,7 @@ def parse_preferences(text: str, result: ParsedIntent) -> None:
         ),
         "pets": (
             r"без собак|без питомц|собак[а-я]* не (?:берем|едет)|уб[её]ри (?:собак|питомц)",
-            r"с собак|с кот|с кошк|с питомц|едет собак",
+            r"с собак|с кот|с кошк|с питомц|едет собак|добав[а-я]*\s+(?:собак|кошк|кот|питомц)",
         ),
         "pool": (
             r"без бассейн|бассейн[а-я]* (?:не нужен|необязател)|уб[её]ри бассейн|не (?:хочу|нуж[а-я]*)\s*(?:с\s*)?бассейн",
@@ -389,7 +494,7 @@ def parse_preferences(text: str, result: ParsedIntent) -> None:
             result.patch[key] = False
         elif re.search(positive, text):
             result.patch[key] = True
-    rating = re.search(r"рейтинг[а-я]*\s*(?:от|не ниже|>=)?\s*(\d(?:[.,]\d)?)", text)
+    rating = re.search(RATING_PATTERN, text)
     if rating:
         result.patch["min_rating"] = float(rating[1].replace(",", "."))
     stars = re.search(r"(?:от\s*)?([1-5])\s*(?:звезд|звездоч|\*)", text)
@@ -410,6 +515,79 @@ def parse_preferences(text: str, result: ParsedIntent) -> None:
         result.patch["max_beach_m"] = 100
     elif re.search(r"рядом с морем|близко к морю|у самого моря", text):
         result.patch["max_beach_m"] = 500
+    return parse_preference_modes(text, result, current)
+
+
+def parse_preference_modes(text: str, result: ParsedIntent, current: TripRequirements) -> bool:
+    """Attach strength only to the wish mentioned in its own clause.
+
+    False means no requirement, never a prohibition on an included amenity.
+    Omitted strengths retain the legacy defaults (quiet soft; others hard).
+    """
+    modes = dict(getattr(current, "preference_modes", {}))
+    original_modes = dict(modes)
+    contradictions = []
+    numeric = {"max_beach_m", "min_rating", "stars"}
+    for key in ("breakfast", "pool", "refundable", "quiet", "direct_only", *numeric):
+        polarities = set()
+        for clause in re.split(r"[,;.!?]|\s+и\s+", text):
+            if not re.search(FIELD_EVIDENCE[key], clause):
+                continue
+            neutral = re.search(
+                r"не\s*важ[а-я]*|не\s*нуж[а-я]*|не\s*обязател[а-я]*|"
+                r"уб(?:ери|рать|ираем)[а-я]*|сними[а-я]*|без требования|без обязательн[а-я]*",
+                clause,
+            )
+            preferred = re.search(r"желател[а-я]*|предпоч[а-я]*|лучше|хорошо бы|по возможности", clause)
+            preferred_without = key in {"breakfast", "pool", "refundable", "quiet"} and re.search(
+                rf"(?:желател[а-я]*|предпоч[а-я]*|лучше|хорошо бы)\s+без\s+"
+                rf"(?:(?:обязательн|бесплатн|включенн|платн)[а-я]*\s+)*(?:{FIELD_EVIDENCE[key]})",
+                clause,
+            )
+            required = re.search(r"(?<!не )\bобязател[а-я]*|строго|непременно", clause)
+            rejected_absence = re.search(
+                r"без\s+[а-я\s]+\s+не\s+(?:рассматрива[а-я]*|подход[а-я]*|устраива[а-я]*)",
+                clause,
+            )
+            if rejected_absence and key not in numeric:
+                result.patch[key] = True
+                polarities.add(True)
+                if key == "quiet" or key in modes:
+                    modes[key] = "required"
+                continue
+            if preferred_without or (neutral and not preferred):
+                polarities.add(False)
+                result.patch[key] = None if key == "max_beach_m" else 0 if key in numeric else False
+                modes.pop(key, None)
+            elif preferred:
+                if key not in numeric:
+                    result.patch[key] = True
+                if key in result.patch or getattr(current, key) is not None:
+                    modes[key] = "preferred"
+            elif required:
+                polarities.add(True)
+                if key not in numeric:
+                    result.patch[key] = True
+                if (key in result.patch or getattr(current, key) is not None) and (
+                    key == "quiet" or key in modes
+                ):
+                    modes[key] = "required"
+            elif key in result.patch and result.patch[key] and key in modes:
+                # A plain explicit request restores normal required semantics.
+                modes[key] = "preferred" if key == "quiet" else "required"
+        if len(polarities) > 1:
+            contradictions.append(key)
+    if contradictions:
+        result.patch.clear()
+        result.questions.extend({
+            "field": key,
+            "question": f"{PREFERENCE_LABELS[key]}: это обязательное требование, пожелание или неважно? В сообщении указаны разные условия.",
+            "options": [],
+        } for key in contradictions)
+        return True
+    if modes != original_modes:
+        result.patch["preference_modes"] = modes
+    return False
 
 
 def parse_location_transport(text: str, result: ParsedIntent, original: str = "") -> None:
@@ -579,6 +757,37 @@ def parse_rules(
             "Помогу с условиями поездки. Служебные инструкции и секреты не раскрываю."
         )
         return result
+    hypothetical = re.search(
+        r"что\s+(?:изменится|будет|поменяется).*?если|а\s+если|что если|"
+        r"^\s*(?:будет|станет)\s+ли\s+(?:дешевле|дороже|лучше)|"
+        r"^\s*что\s+(?:изменится|поменяется)|^\s*можно\s+ли|"
+        r"^\s*если\s+(?=(?:убрать|отменить|добавить|изменить|сократить|увеличить|сдвинуть|взять|без|с)\b)"
+        r"(?=[^?]*(?:дешевле|дороже|стоимост|цен[аыу]|что\s+изменится|как\s+изменится))",
+        text,
+    )
+    if hypothetical:
+        # Parse a proposed branch in isolation; no recognizer may apply it to
+        # live requirements, even if it contains several imperative verbs.
+        branch = parse_rules(text[hypothetical.end():], current, today=today)
+        result.hypothetical = True
+        result.hypothetical_patch = branch.patch
+        result.price_question = next(
+            (key for key in branch.patch if key in FIELD_EVIDENCE), None
+        )
+        result.questions = branch.questions
+        result.notices = branch.notices
+        result.recognized = True
+        return result
+    result.keep_hotel = bool(re.search(
+        r"(?:остав[а-я]*|сохрани[а-я]*|закрепи[а-я]*)\s+(?:(?:этот|тот же|выбранный|текущий)\s+)?отел",
+        text,
+    ))
+    result.release_hotel = bool(re.search(
+        r"друг[а-я]*\s+отел|(?:убери|сними|отмени)\s+(?:закреплен[а-я]*|фиксаци[а-я]*)(?:\s+отел[а-я]*)?|не\s+сохраня[а-я]*\s+отел",
+        text,
+    ))
+    if result.release_hotel:
+        result.keep_hotel = False
     if re.search(r"сколько|переплач|цена желания|цену желания|экономи", text) and not re.search(
         r"добав|убери|разреш|уменьш|увелич|сниз|бюджет\s*\d", text
     ):
@@ -597,11 +806,22 @@ def parse_rules(
                 result.price_question = key
                 result.recognized = True
                 return result
-    parse_dates(text, current, today, result)
-    parse_budget(text, current, result)
+    # Decimal ratings use the same punctuation as short calendar dates.
+    parse_dates(re.sub(RATING_PATTERN, "", text), current, today, result)
+    if parse_budget(text, current, result):
+        result.recognized = True
+        return result
     parse_guests(text, current, result)
-    parse_preferences(text, result)
+    if parse_preferences(text, result, current):
+        result.recognized = True
+        return result
     parse_location_transport(text, result, original=message)
+    if re.search(r"дешевле|подешевле", text) and not result.patch:
+        result.questions.append({
+            "field": "budget",
+            "question": "Какой максимальный общий бюджет задать? Укажите сумму в рублях; остальные условия сохраню.",
+            "options": [],
+        })
     unsupported = []
     for pattern, label in [
         (r"все включено|all inclusive", "питание «всё включено»"),
@@ -628,6 +848,8 @@ def parse_rules(
         result.patch["unsupported"] = []
     result.recognized = bool(
         result.patch
+        or result.keep_hotel
+        or result.release_hotel
         or result.questions
         or result.month_hint
         or re.search(r"мор[еюя]|отдых|отпуск|путешеств|поездк|куда.нибудь|куда поехать", text)
@@ -643,6 +865,8 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
     rules = parse_rules(message, current, today=today)
     if (
         configured_mode() == "rules"
+        or rules.hypothetical
+        or rules.questions
         or rules.price_question
         or (rules.notices and not rules.recognized)
     ):
@@ -695,11 +919,32 @@ async def extract_intent(message: str, current: TripRequirements, today: date) -
             if not isinstance(patch, dict) or set(patch) - ALLOWED_PATCH:
                 raise ValueError("Unexpected extraction fields")
             normalized = message.lower().replace("ё", "е")
-            for field_name, value in patch.items():
+            if "preference_modes" in patch:
+                proposed_modes = patch["preference_modes"]
+                if not isinstance(proposed_modes, dict):
+                    raise ValueError("Invalid preference modes")
+                for preference, mode in proposed_modes.items():
+                    if (
+                        preference not in current.preference_modes
+                        or mode != current.preference_modes[preference]
+                    ) and (
+                        preference not in FIELD_EVIDENCE
+                        or not re.search(FIELD_EVIDENCE[preference], normalized)
+                        or mode != rules.patch.get("preference_modes", {}).get(preference)
+                    ):
+                        raise ValueError("Extraction changes preference strength without evidence")
+                patch["preference_modes"] = current.preference_modes | proposed_modes
+            for field_name in patch:
+                if field_name == "preference_modes":
+                    continue
+                preserved = any(
+                    re.search(FIELD_EVIDENCE[field_name], clause)
+                    and re.search(r"тот же|та же|те же|остав[а-я]*|сохран[а-я]*|не меня[а-я]*", clause)
+                    for clause in re.split(r"[,;.!?]|\s+и\s+", normalized)
+                )
                 if (
-                    value != current.model_dump(mode="json")[field_name]
-                    and field_name not in rules.patch
-                    and not re.search(FIELD_EVIDENCE[field_name], normalized)
+                    field_name not in rules.patch
+                    and (preserved or not re.search(FIELD_EVIDENCE[field_name], normalized))
                 ):
                     raise ValueError("Extraction changes a requirement without message evidence")
             TripRequirements.model_validate(current.model_dump() | patch, strict=False)

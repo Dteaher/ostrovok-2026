@@ -24,11 +24,13 @@ from app.models import (
     UpdateMessageRequest,
 )
 from app.parser import configured_mode
-from app.search import find_plan, validate_plan
+from app.search import find_plan, search, validate_plan
 from app.service import (
     DATA_LABEL,
     apply_patch_to_state,
+    hotel_id,
     new_state,
+    normalize_state,
     process_message,
     public_state,
 )
@@ -112,7 +114,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
         state = database.load(session_id)
         if state is None:
             raise HTTPException(404, "Поездка не найдена. Начните новый подбор.")
-        return state
+        return normalize_state(state)
 
     def guard(state: dict, revision: int) -> None:
         if state["revision"] != revision:
@@ -195,7 +197,11 @@ def create_app(db_url: str | None = None) -> FastAPI:
         guard(state, payload.revision)
         if state["stage"] not in {"results", "selected"}:
             raise HTTPException(409, "Сначала уточните условия поездки")
+        if state["clarifications"]:
+            raise HTTPException(409, "Сначала ответьте на уточнение — предложение может измениться")
         req = TripRequirements.model_validate(state["requirements"])
+        # Selecting a different offer is explicit user consent to change hotel.
+        # Automatic replans remain scoped to the retained hotel intention.
         plan = find_plan(req, payload.plan_id)
         if plan is None:
             raise HTTPException(404, "Предложение не найдено в текущих условиях. Обновите подбор.")
@@ -205,9 +211,14 @@ def create_app(db_url: str | None = None) -> FastAPI:
         state.update(
             stage="selected",
             selected_plan=plan,
+            hotel_intent={"id": plan["hotel"]["id"], "name": plan["hotel"]["name"]},
+            request_status="idle",
+            hypothetical=None,
+            _hypothetical_pending=None,
             changes=[],
             assistant_message="Вы выбрали поездку. Проверьте состав и полную стоимость, затем можно оформить демонстрационный заказ.",
         )
+        state["counterfactuals"] = search(req, hotel_id=hotel_id(state))["counterfactuals"]
         return save(state, payload.revision)
 
     @application.post("/api/sessions/{session_id}/checkout")
@@ -218,9 +229,11 @@ def create_app(db_url: str | None = None) -> FastAPI:
         guard(state, payload.revision)
         if state["stage"] != "selected" or not state["selected_plan"]:
             raise HTTPException(409, "Сначала выберите поездку")
+        if state["request_status"] == "needs_clarification" or state["clarifications"]:
+            raise HTTPException(409, "Сначала ответьте на уточнение и проверьте состав поездки")
         req = TripRequirements.model_validate(state["requirements"])
         selected = state["selected_plan"]
-        current = find_plan(req, selected["id"])
+        current = find_plan(req, selected["id"], hotel_id=hotel_id(state))
         if current is None or current["price"] != selected["price"]:
             raise HTTPException(409, "Условия предложения изменились. Выполните новый подбор.")
         errors = validate_plan(selected, req)
@@ -242,6 +255,8 @@ def create_app(db_url: str | None = None) -> FastAPI:
         state.update(
             stage="booked",
             order=order,
+            hypothetical=None,
+            _hypothetical_pending=None,
             changes=[],
             assistant_message="Демонстрационная поездка оформлена. Номер заказа сохранён; подтверждение можно скачать. Реальной оплаты и бронирования нет.",
         )

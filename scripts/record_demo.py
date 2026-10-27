@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -27,6 +28,8 @@ def main():
             reduced_motion="reduce",
         )
         page = context.new_page()
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
 
         def pause(seconds=5):
             page.wait_for_timeout(seconds * 1000)
@@ -40,8 +43,9 @@ def main():
 
         page.goto(os.getenv("OPLAN_TEST_URL", "http://127.0.0.1:8080"))
         pause(6)
+        day = (date.today() + timedelta(days=14)).isoformat()
         page.locator("#trip-message").press_sequentially(
-            "В Сочи с 6 ноября 2026 на неделю вдвоём, до 160 тысяч, с завтраком и прямым перелётом",
+            f"В Сочи с {day} на неделю вдвоём, до 160 тысяч, желательно с завтраком",
             delay=35,
         )
         pause(3)
@@ -50,27 +54,37 @@ def main():
         pause(6)
         page.locator(".hotel-grid").scroll_into_view_if_needed()
         pause(10)
-        page.locator(".alternatives").scroll_into_view_if_needed()
-        pause(8)
-        page.locator("#refine-message").press_sequentially("Сколько стоит мой завтрак?", delay=45)
-        act(lambda: page.locator(".composer-submit").click())
-        page.locator(".assistant-message").scroll_into_view_if_needed()
-        pause(10)
-        page.locator("#refine-message").scroll_into_view_if_needed()
-        page.locator("#refine-message").press_sequentially("На два дня позже, с собакой", delay=60)
+        page.locator("#refine-message").press_sequentially("Теперь завтрак обязателен", delay=45)
         act(lambda: page.locator(".composer-submit").click())
         page.locator(".conditions").scroll_into_view_if_needed()
+        pause(5)
+        act(lambda: page.locator(".hotel-card .button").first.click())
+        page.locator("#refine-message").scroll_into_view_if_needed()
+        page.locator("#refine-message").press_sequentially("Что изменится, если убрать завтрак?", delay=45)
+        act(lambda: page.locator(".composer-submit").click())
+        page.locator(".assistant-message").scroll_into_view_if_needed()
         pause(8)
+        page.locator("#refine-message").scroll_into_view_if_needed()
+        page.locator("#refine-message").press_sequentially("Оставь этот отель, но сократи поездку на день", delay=45)
+        act(lambda: page.locator(".composer-submit").click())
+        expect(page.locator(".hotel-card")).to_have_count(1)
+        page.locator(".hotel-intent-note").scroll_into_view_if_needed()
+        pause(6)
         page.locator(".hotel-grid").scroll_into_view_if_needed()
-        pause(7)
-        act(
-            lambda: (
-                page.locator(".hotel-card")
-                .nth(1)
-                .get_by_role("button", name="Посмотреть план")
-                .click()
-            )
-        )
+        pause(6)
+        act(lambda: page.get_by_role("button", name="Подтвердить новый план", exact=False).click())
+        page.locator("#refine-message").scroll_into_view_if_needed()
+        page.locator("#refine-message").press_sequentially("Добавь ребёнка", delay=55)
+        act(lambda: page.locator(".composer-submit").click())
+        expect(page.locator(".checkout-submit")).to_be_disabled()
+        page.locator(".clarification-questions").scroll_into_view_if_needed()
+        pause(6)
+        page.locator("#refine-message").scroll_into_view_if_needed()
+        page.locator("#refine-message").press_sequentially("6 лет", delay=90)
+        act(lambda: page.locator(".composer-submit").click())
+        page.locator(".hotel-grid").scroll_into_view_if_needed()
+        pause(5)
+        act(lambda: page.get_by_role("button", name="Подтвердить новый план", exact=False).click())
         page.locator(".detail-summary").scroll_into_view_if_needed()
         pause(9)
         page.locator(".timeline-section").scroll_into_view_if_needed()
@@ -86,6 +100,7 @@ def main():
         pause(10)
         page.reload()
         expect(page.locator(".booked-section")).to_be_visible()
+        assert not errors, errors
         pause(7)
         video = page.video
         await_path = video.path()

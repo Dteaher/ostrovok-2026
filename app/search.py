@@ -5,20 +5,21 @@ from collections import Counter
 from copy import deepcopy
 from datetime import datetime, time, timedelta
 from hashlib import sha256
+from itertools import combinations
 from math import ceil
 from zoneinfo import ZoneInfo
 
 from app.catalog import CATALOG_VERSION, DATA_LABEL, HOTELS, HOTELS_BY_ID
-from app.models import TripRequirements
+from app.models import TripRequirements, is_required, search_terms
 
 _MOSCOW = ZoneInfo("Europe/Moscow")
 
 _RELAXATIONS = {
     "breakfast": (False, "Без обязательного завтрака"),
-    "refundable": (False, "Невозвратный тариф"),
-    "pets": (False, "Поездка без питомца"),
+    "refundable": (False, "Без обязательной бесплатной отмены"),
     "pool": (False, "Без обязательного бассейна"),
-    "accessible": (False, "Без требования адаптированного номера"),
+    "quiet": (False, "Без обязательной тишины"),
+    "direct_only": (False, "Без обязательного прямого маршрута"),
     "max_beach_m": (None, "Без ограничения расстояния до пляжа"),
     "min_rating": (0, "Без минимального рейтинга"),
     "stars": (0, "Без ограничения по звёздам"),
@@ -79,14 +80,16 @@ def _hotel_failures(hotel, req):
     if not _destination_matches(hotel, req.destination):
         failures.append("destination")
     for feature in ("pets", "pool", "accessible"):
-        if getattr(req, feature) and feature not in hotel["features"]:
+        if is_required(req, feature) and feature not in hotel["features"]:
             failures.append(feature)
-    if req.max_beach_m is not None and hotel["beach_m"] > req.max_beach_m:
+    if is_required(req, "max_beach_m") and hotel["beach_m"] > req.max_beach_m:
         failures.append("max_beach_m")
-    if hotel["rating"] < req.min_rating:
+    if is_required(req, "min_rating") and hotel["rating"] < req.min_rating:
         failures.append("min_rating")
-    if hotel["stars"] < req.stars:
+    if is_required(req, "stars") and hotel["stars"] < req.stars:
         failures.append("stars")
+    if is_required(req, "quiet") and hotel["quietness"] < 8:
+        failures.append("quiet")
     return failures
 
 
@@ -184,12 +187,20 @@ def _plan(hotel, req, rooms, breakfast, refundable):
     rate_id = f"{'breakfast' if breakfast else 'room'}-{'flex' if refundable else 'fixed'}"
     plan_id = (
         "plan_"
-        + _digest([CATALOG_VERSION, req.model_dump(mode="json"), hotel["id"], rate_id, rooms])[:24]
+        + _digest(
+            [
+                CATALOG_VERSION,
+                search_terms(req),
+                hotel["id"],
+                rate_id,
+                rooms,
+            ]
+        )[:24]
     )
     reasons = [f"{hotel['beach_m']} м до пляжа", f"Рейтинг {hotel['rating']:.1f} из 10"]
-    if req.breakfast:
+    if req.breakfast and breakfast:
         reasons.append("Завтрак включён для всех гостей от 6 лет; до 6 лет бесплатно")
-    if req.refundable:
+    if req.refundable and refundable:
         reasons.append("Бесплатная отмена до срока, указанного в тарифе")
     if req.quiet and hotel["quietness"] >= 8:
         reasons.insert(0, "Тихий район и спокойная территория по демо-каталогу")
@@ -198,7 +209,7 @@ def _plan(hotel, req, rooms, breakfast, refundable):
         ("pool", "Бассейн на территории"),
         ("accessible", "Адаптированный номер и безбарьерный вход"),
     ):
-        if getattr(req, field):
+        if getattr(req, field) and field in hotel["features"]:
             reasons.append(label)
     compromises = []
     if not breakfast:
@@ -314,10 +325,14 @@ def _plan(hotel, req, rooms, breakfast, refundable):
             "features",
         )
     }
+    preference_matches, preference_compromises = _preferences(hotel, req, breakfast, refundable)
+    reasons.extend(text for text in preference_matches if text not in reasons)
+    compromises.extend(text for text in preference_compromises if text not in compromises)
     score = round(
         hotel["rating"] * 10 - total / 12000 + (hotel["quietness"] * 3 if req.quiet else 0),
         3,
     )
+    score += len(preference_matches) * 30
     return {
         "id": plan_id,
         "hotel": public_hotel,
@@ -349,6 +364,8 @@ def _plan(hotel, req, rooms, breakfast, refundable):
         },
         "reasons": reasons,
         "compromises": compromises,
+        "preference_matches": preference_matches,
+        "preference_compromises": preference_compromises,
         "warnings": warnings,
         "score": score,
         "policy": f"Бесплатная отмена до {cancel_until.replace('T', ' ')} (Москва); после — стоимость проживания."
@@ -364,13 +381,51 @@ def _budget_amount(plan, req):
     return price["hotel"] + price["extras"] if req.budget_scope == "hotel" else price["total"]
 
 
-def _candidates(req, *, enforce_budget=True):
+def _preferences(hotel, req, breakfast, refundable):
+    conditions = {
+        "breakfast": (breakfast, "Завтрак включён", "Завтрак не включён"),
+        "refundable": (
+            refundable,
+            "Возвратный тариф",
+            "Возвратный тариф недоступен в этом варианте",
+        ),
+        "pool": ("pool" in hotel["features"], "Бассейн на территории", "Нет бассейна"),
+        "quiet": (hotel["quietness"] >= 8, "Спокойная территория", "Оживлённый район"),
+        "direct_only": (True, "Прямой маршрут", "Маршрут с пересадкой"),
+        "max_beach_m": (
+            req.max_beach_m is None or hotel["beach_m"] <= req.max_beach_m,
+            "Расстояние до пляжа в пределах пожелания",
+            "До пляжа дальше желаемого",
+        ),
+        "min_rating": (
+            hotel["rating"] >= req.min_rating,
+            "Рейтинг соответствует пожеланию",
+            "Рейтинг ниже желаемого",
+        ),
+        "stars": (
+            hotel["stars"] >= req.stars,
+            "Звёздность соответствует пожеланию",
+            "Звёздность ниже желаемой",
+        ),
+    }
+    matches, compromises = [], []
+    for field, (satisfied, matched, missed) in conditions.items():
+        if _active_requirement(req, field) and not is_required(req, field):
+            (matches if satisfied else compromises).append(matched if satisfied else missed)
+    return matches, compromises
+
+
+def _candidates(req, *, enforce_budget=True, hotel_id=None):
     rejected = Counter()
     if errors := _input_errors(req):
         rejected.update(errors)
         return [], dict(rejected)
     plans = []
+    if hotel_id is not None and hotel_id not in HOTELS_BY_ID:
+        return [], {"hotel_id": 1}
     for hotel in HOTELS:
+        if hotel_id is not None and hotel["id"] != hotel_id:
+            continue
         if failures := _hotel_failures(hotel, req):
             rejected.update(failures)
             continue
@@ -379,8 +434,8 @@ def _candidates(req, *, enforce_budget=True):
             rejected["occupancy"] += 1
             continue
         # Enumerate actual rates; a request does not silently upgrade cheaper rates.
-        for breakfast in [True] if req.breakfast else [False, True]:
-            for refundable in [True] if req.refundable else [False, True]:
+        for breakfast in [True] if is_required(req, "breakfast") else [False, True]:
+            for refundable in [True] if is_required(req, "refundable") else [False, True]:
                 if refundable and _cancellation_cutoff(req).replace(tzinfo=_MOSCOW) <= datetime.now(
                     _MOSCOW
                 ):
@@ -397,13 +452,13 @@ def _candidates(req, *, enforce_budget=True):
 
 def _distinct(plans):
     best = {}
-    for plan in sorted(plans, key=lambda p: (p["price"]["total"], p["id"])):
+    for plan in sorted(plans, key=lambda p: (-p["score"], p["price"]["total"], p["id"])):
         best.setdefault(plan["hotel"]["id"], plan)
     # A soft preference can reorder eligible options, never remove one.
     return sorted(best.values(), key=lambda p: (-p["score"], p["price"]["total"], p["id"]))
 
 
-def _representative_choices(ranked):
+def _representative_choices(ranked, *, minimum_total=None):
     """Keep the best fit, cheapest hotel, and strongest remaining comfort option.
 
     Canonical plans and their score ranking stay unchanged; only the display
@@ -413,15 +468,20 @@ def _representative_choices(ranked):
     if not ranked:
         return [], {}
     cheapest = min(ranked, key=lambda p: (p["price"]["total"], p["id"]))
+    cheapest_label = (
+        "Самая низкая цена"
+        if minimum_total is None or cheapest["price"]["total"] == minimum_total
+        else "Ближе к пожеланиям"
+    )
     selected = [ranked[0]]
     labels = {
-        ranked[0]["id"]: "Самая низкая цена"
+        ranked[0]["id"]: cheapest_label
         if ranked[0]["id"] == cheapest["id"]
         else "Ближе к пожеланиям"
     }
     if cheapest["id"] != ranked[0]["id"]:
         selected.append(cheapest)
-        labels[cheapest["id"]] = "Самая низкая цена"
+        labels[cheapest["id"]] = cheapest_label
     selected_ids = {plan["id"] for plan in selected}
     remaining = [plan for plan in ranked if plan["id"] not in selected_ids]
     if remaining:
@@ -453,76 +513,128 @@ def _active_requirement(req, field):
     return value is not None if field == "max_beach_m" else bool(value)
 
 
-def _suggestions(req):
+def _suggestions(req, *, hotel_id=None):
+    """Verify bounded single changes, then pairs if too few singles succeed."""
     errors = _input_errors(req)
-    if "origin" in errors:
-        return [
-            {
-                "field": "transport",
-                "value": "self",
-                "label": "Самостоятельная дорога: для этого города демо-маршрута нет; расходы на дорогу не рассчитаны",
-            }
-        ]
-    if "destination" in errors:
-        return [
-            {
-                "field": "destination",
-                "value": "Сочи",
-                "label": "Рассмотреть Большой Сочи — доступный демо-каталог",
-            }
-        ]
-    if "transport_schedule" in errors and "check_in" not in errors:
+    if "check_in" in errors:
+        return []
+    changes = []
+    if "transport_schedule" in errors:
         next_day = datetime.now(_MOSCOW).date() + timedelta(
             days=2 if req.transport == "train" else 1
         )
-        return [
-            {
-                "field": "check_in",
-                "value": next_day.isoformat(),
-                "label": f"Перенести заселение на {next_day:%d.%m.%Y}: отправление по прежней дате уже прошло",
-            }
-        ]
-    if "check_in" in errors:
-        return []  # Clarifications collect an explicit future date.
+        changes.append(
+            (
+                "check_in",
+                next_day.isoformat(),
+                f"Перенести заселение на {next_day:%d.%m.%Y}: отправление уже прошло",
+            )
+        )
+    if "origin" in errors:
+        changes.append(
+            ("transport", "self", "Самостоятельная дорога: расходы на дорогу не рассчитаны")
+        )
+    if "destination" in errors:
+        changes.append(("destination", "Сочи", "Рассмотреть Большой Сочи — демо-каталог"))
     if "unsupported" in errors:
-        return [
-            {
-                "field": "unsupported",
-                "value": [],
-                "label": "Убрать неподдерживаемые условия (только с вашего согласия)",
-            }
-        ]
-    suggestions = []
-    without_budget, _ = _candidates(req, enforce_budget=False)
-    if without_budget and req.budget is not None:
-        key = "hotel" if req.budget_scope == "hotel" else "total"
-        cheapest = min(_budget_amount(p, req) for p in without_budget)
-        if cheapest > req.budget:
-            suggestions.append(
-                {
-                    "field": "budget",
-                    "value": cheapest,
-                    "label": f"Увеличить бюджет до {cheapest:,} ₽ за {'отель' if key == 'hotel' else 'поездку'}".replace(
-                        ",", " "
-                    ),
-                }
-            )
-    for field, (value, label) in _RELAXATIONS.items():
-        if not _active_requirement(req, field):
-            continue
-        relaxed = req.model_copy(update={field: value})
-        if _candidates(relaxed)[0]:
-            suggestions.append(
-                {
-                    "field": field,
-                    "value": value,
-                    "label": label + " — только с вашего согласия",
-                }
-            )
-    return suggestions[:4]
+        changes.append(("unsupported", [], "Убрать неподдерживаемые условия"))
+    if not errors:
+        for field, (value, label) in _RELAXATIONS.items():
+            if _active_requirement(req, field) and is_required(req, field):
+                changes.append((field, value, label))
+
+    def evaluate(patch, labels):
+        updated = TripRequirements.model_validate({**req.model_dump(), **patch})
+        candidates, _ = _candidates(updated, hotel_id=hotel_id)
+        if not candidates:
+            return None
+        item = {
+            "patch": patch,
+            "label": "; ".join(labels) + " — только с вашего согласия",
+            "total_matches": len(_distinct(candidates)),
+            "min_total": min(p["price"]["total"] for p in candidates),
+        }
+        if len(patch) == 1:
+            item["field"], item["value"] = next(iter(patch.items()))
+        return item
+
+    def budget_change(patch):
+        if req.budget is None:
+            return None
+        updated = TripRequirements.model_validate({**req.model_dump(), **patch})
+        candidates, _ = _candidates(updated, enforce_budget=False, hotel_id=hotel_id)
+        if not candidates:
+            return None
+        minimum = min(_budget_amount(p, updated) for p in candidates)
+        if minimum <= req.budget:
+            return None
+        return minimum, f"Увеличить бюджет до {minimum:,} ₽".replace(",", " ")
+
+    singles = []
+    if budget := budget_change({}):
+        amount, label = budget
+        singles.append(evaluate({"budget": amount}, [label]))
+    for field, value, label in changes:
+        if item := evaluate({field: value}, [label]):
+            singles.append(item)
+    suggestions = [item for item in singles if item]
+    if len(suggestions) < 4 and not errors:
+        for first, second in combinations(changes, 2):
+            patch = {first[0]: first[1], second[0]: second[1]}
+            if item := evaluate(patch, [first[2], second[2]]):
+                suggestions.append(item)
+        for field, value, label in changes:
+            if budget := budget_change({field: value}):
+                amount, budget_label = budget
+                if item := evaluate({field: value, "budget": amount}, [label, budget_label]):
+                    suggestions.append(item)
+    return sorted(
+        suggestions, key=lambda item: (len(item["patch"]), item["min_total"], sorted(item["patch"]))
+    )[:4]
 
 
-def _counterfactuals(req, strict):
+def _diagnostic(req, rejected, *, hotel_id=None):
+    errors = _input_errors(req)
+    if errors:
+        kind = "unsupported_destination" if "destination" in errors else "unsupported_input"
+        return {
+            "kind": kind,
+            "fields": errors,
+            "message": "Условия не поддерживаются демо-каталогом Большого Сочи; уточните запрос.",
+        }
+    if hotel_id is not None and (
+        "hotel_id" in rejected or _hotel_failures(HOTELS_BY_ID[hotel_id], req)
+    ):
+        return {
+            "kind": "pinned_hotel_conflict",
+            "hotel_id": hotel_id,
+            "fields": list(rejected),
+            "message": "Выбранный отель не соответствует условиям демо-каталога. Отель сохранён.",
+        }
+    if "budget" in rejected:
+        return {
+            "kind": "budget",
+            "fields": ["budget"],
+            "message": "Подходящие варианты демо-каталога превышают бюджет.",
+        }
+    if "occupancy" in rejected and not any(
+        not _hotel_failures(h, req) and _occupancy(h, req) is not None
+        for h in HOTELS
+        if hotel_id is None or h["id"] == hotel_id
+    ):
+        return {
+            "kind": "availability",
+            "fields": ["occupancy"],
+            "message": "В демо-каталоге нет доступных номеров для всех гостей на весь срок.",
+        }
+    return {
+        "kind": "constraints",
+        "fields": list(rejected),
+        "message": "В демо-каталоге нет вариантов со всеми обязательными условиями.",
+    }
+
+
+def _counterfactuals(req, strict, *, hotel_id=None):
     if not strict:
         return []
     baseline = min(strict, key=lambda p: (p["price"]["total"], p["id"]))
@@ -532,7 +644,7 @@ def _counterfactuals(req, strict):
         if field == "accessible" or not _active_requirement(req, field):
             continue
         relaxed = req.model_copy(update={field: value})
-        alternatives, _ = _candidates(relaxed)
+        alternatives, _ = _candidates(relaxed, hotel_id=hotel_id)
         if not alternatives:
             continue
         alternative = min(alternatives, key=lambda p: (p["price"]["total"], p["id"]))
@@ -553,24 +665,32 @@ def _counterfactuals(req, strict):
     return sorted(items, key=lambda item: (-item["saving"], item["field"]))[:3]
 
 
-def search(requirements: TripRequirements, limit: int = 3) -> dict:
-    plans, rejected = _candidates(requirements)
+def search(requirements: TripRequirements, limit: int = 3, *, hotel_id: str | None = None) -> dict:
+    plans, rejected = _candidates(requirements, hotel_id=hotel_id)
     distinct = _distinct(plans)
-    ordered, labels = _representative_choices(distinct)
+    ordered, labels = _representative_choices(
+        distinct, minimum_total=min((p["price"]["total"] for p in plans), default=None)
+    )
     displayed = ordered[: max(0, limit)]
     return {
         "plans": displayed,
         "plan_labels": {plan["id"]: labels[plan["id"]] for plan in displayed},
         "total_matches": len(distinct),
+        "min_total": min((plan["price"]["total"] for plan in plans), default=None),
         "rejected": rejected,
-        "suggestions": _suggestions(requirements) if not distinct else [],
-        "counterfactuals": _counterfactuals(requirements, plans),
+        "diagnostic": _diagnostic(requirements, rejected, hotel_id=hotel_id)
+        if not distinct
+        else None,
+        "suggestions": _suggestions(requirements, hotel_id=hotel_id) if not distinct else [],
+        "counterfactuals": _counterfactuals(requirements, plans, hotel_id=hotel_id),
         "catalog_version": CATALOG_VERSION,
     }
 
 
-def find_plan(requirements: TripRequirements, plan_id: str) -> dict | None:
-    plans, _ = _candidates(requirements)
+def find_plan(
+    requirements: TripRequirements, plan_id: str, *, hotel_id: str | None = None
+) -> dict | None:
+    plans, _ = _candidates(requirements, hotel_id=hotel_id)
     return next((plan for plan in plans if plan["id"] == plan_id), None)
 
 
@@ -600,11 +720,11 @@ def validate_plan(plan: dict, requirements: TripRequirements) -> list[str]:
             errors.append("Вместимость или состав номеров не соответствует гостям")
         if rooms != _occupancy(hotel, requirements):
             errors.append("Номера недоступны на весь срок")
-        if requirements.breakfast and plan["meal"] != "Завтрак включён":
+        if is_required(requirements, "breakfast") and plan["meal"] != "Завтрак включён":
             errors.append("Требуется завтрак")
-        if requirements.refundable and not plan["refundable"]:
+        if is_required(requirements, "refundable") and not plan["refundable"]:
             errors.append("Требуется возвратный тариф")
-        if requirements.direct_only and not plan["transport"]["direct"]:
+        if is_required(requirements, "direct_only") and not plan["transport"]["direct"]:
             errors.append("Требуется прямой маршрут")
         expected_out = requirements.check_in + timedelta(days=requirements.nights)
         if plan["dates"] != {
@@ -663,6 +783,8 @@ def validate_plan(plan: dict, requirements: TripRequirements) -> list[str]:
                 "warnings",
                 "reasons",
                 "compromises",
+                "preference_matches",
+                "preference_compromises",
                 "score",
             ):
                 if plan.get(field) != expected[field]:

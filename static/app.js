@@ -183,6 +183,7 @@
     announce('Собираем ваш план. Пожалуйста, подождите.');
     try {
       const session = await request(path, { method, body: JSON.stringify(body) });
+      if (session.selected_plan?.id !== state.session?.selected_plan?.id) state.checkout.accepted = false;
       state.session = session;
       state.showResults = false;
       state.draft = '';
@@ -192,7 +193,7 @@
       if (error.status === 409 && state.session) {
         try {
           state.session = await request(`/api/sessions/${encodeURIComponent(state.session.id)}`);
-          state.error = 'План изменился в другой вкладке. Мы загрузили свежую версию. Проверьте условия и повторите действие.';
+          state.error = error.message.includes('другой вкладке') ? 'План изменился в другой вкладке. Мы загрузили свежую версию. Проверьте условия и повторите действие.' : error.message;
         } catch { state.error = 'Не удалось обновить план. Перезагрузите страницу и повторите действие.'; }
       } else if (error.status === 404 && state.session) {
         state.error = 'Этот план больше недоступен. Начните новую поездку — исходный запрос можно скопировать из истории ниже.';
@@ -312,10 +313,11 @@
     const transport = { flight: 'Перелёт', train: 'Поезд', self: 'Своим ходом' }[r.transport] || 'Дорога';
     const terms = [r.destination || 'Куда — уточним', `${date(r.check_in)} · ${nights(r.nights)}`, people.join(' + '), r.budget ? `До ${money(r.budget)}${r.budget_scope === 'hotel' ? ' на отель' : ' за всё'}` : 'Бюджет не задан', `${transport}${r.origin ? ' · ' + r.origin : ''}`];
     const flags = [['breakfast', 'Завтраки'], ['pool', 'Бассейн'], ['pets', 'С питомцем'], ['refundable', 'С отменой'], ['direct_only', 'Без пересадок'], ['quiet', 'Тихий отдых'], ['accessible', 'Доступная среда']];
-    flags.forEach(([key, label]) => { if (r[key]) terms.push(label); });
-    if (r.max_beach_m != null) terms.push(`Море до ${r.max_beach_m} м`);
-    if (r.min_rating) terms.push(`Оценка от ${r.min_rating}`);
-    if (r.stars) terms.push(`От ${r.stars} звёзд`);
+    const priority = key => r.preference_modes?.[key] === 'preferred' || (key === 'quiet' && !r.preference_modes?.quiet) ? 'желательно' : 'обязательно';
+    flags.forEach(([key, label]) => { if (r[key]) terms.push(`${label} · ${['pets', 'accessible'].includes(key) ? 'обязательно' : priority(key)}`); });
+    if (r.max_beach_m != null) terms.push(`Море до ${r.max_beach_m} м · ${priority('max_beach_m')}`);
+    if (r.min_rating) terms.push(`Оценка от ${r.min_rating} · ${priority('min_rating')}`);
+    if (r.stars) terms.push(`От ${r.stars} звёзд · ${priority('stars')}`);
     return node('section', { class: 'conditions', 'aria-label': 'Сохранённые условия поездки' }, smallLabel('Ваши условия · сохраняем при изменениях'), node('ul', { class: 'condition-list' }, terms.map(term => node('li', {}, term))));
   }
 
@@ -328,14 +330,23 @@
         node('span', { class: 'demo-tag' }, node('span', { class: 'status-dot' }), 'Демопоездка')),
       conditions(session.requirements),
       node('div', { class: 'assistant-message' }, node('span', { class: 'assistant-mark', 'aria-hidden': 'true' }, 'О!'), node('p', {}, session.assistant_message || 'Подобрали варианты под ваши условия.')),
-      session.changes?.length ? node('p', { class: 'changes-note' }, 'Обновили: ', session.changes.map(change => change.label || change.field).join(', '), '. Остальные условия сохранены.') : null,
+      session.changes?.length ? node('p', { class: 'changes-note' }, 'Обновили: ', session.changes.map(change => change.summary || change.label || change.field).join('; '), '. Остальные условия сохранены.') : null,
+      session.hotel_intent && session.stage !== 'booked' ? node('div', { class: 'hotel-intent-note' }, node('p', {}, 'Сохраняем отель: ', node('strong', {}, session.hotel_intent.name), '. При изменении условий проверим его заново.'), button('Рассмотреть другие отели', () => sendMessage('Покажи другие отели'), 'text-button')) : null,
+      session.stage !== 'clarify' && session.clarifications?.length ? clarificationQuestions() : null,
+      session.hypothetical?.total_matches > 0 ? node('div', { class: 'hypothetical-action' }, button('Применить это изменение', () => patchRequirements(session.hypothetical.patch), 'choice-chip'), node('span', {}, 'Только после нажатия изменим условия и пересчитаем предложение.')) : null,
       assumptions.length || session.requirements.unsupported?.length ? node('details', { class: 'assumptions' }, node('summary', {}, 'Что мы приняли за основу', node('span', { 'aria-hidden': 'true' }, ' +')), node('ul', {}, assumptions.map(value => node('li', {}, value)), (session.requirements.unsupported || []).map(value => node('li', {}, 'Пока не можем учесть: ' + value)))) : null);
   }
 
+  function clarificationQuestions() {
+    const questions = (state.session.clarifications || []).map(question => {
+      const choices = (question.options || []).map(option => button(option.label, () => patchRequirements({ [question.field]: option.value }), 'choice-chip'));
+      return node('div', { class: 'clarify-item' }, node('h2', {}, question.question), node('div', { class: 'chip-row' }, choices));
+    });
+    return node('div', { class: 'clarification-questions' }, questions);
+  }
+
   function clarification() {
-    return node('section', { class: 'clarify-section' },
-      (state.session.clarifications || []).map(question => node('div', { class: 'clarify-item' }, node('h2', {}, question.question),
-        node('div', { class: 'chip-row' }, (question.options || []).map(option => button(option.label, () => patchRequirements({ [question.field]: option.value }), 'choice-chip'))))),
+    return node('section', { class: 'clarify-section' }, clarificationQuestions(),
       composer(true), node('p', { class: 'parser-note' }, parserNote()));
   }
 
@@ -354,13 +365,14 @@
         node('div', { class: 'fit-list' }, (plan.reasons || []).slice(0, 3).map(reason => node('p', {}, node('span', { 'aria-hidden': 'true' }, '✓'), reason))),
         node('p', { class: 'compromise' }, node('span', {}, 'Учтите: '), plan.compromises?.length ? plan.compromises.join(' · ') : 'Цены и доступность демонстрационные.'),
         node('div', { class: 'card-bottom' }, node('p', { class: 'total-price' }, money(plan.price.total), node('span', {}, `За всех · ${nights(plan.dates.nights)} · ${plan.transport.mode === 'self' ? 'без самостоятельной дороги' : 'с дорогой'}`)),
-          button(node('span', {}, 'Посмотреть план ', arrow()), () => mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/select`, { plan_id: plan.id, revision: state.session.revision }), 'button button-full'))));
+          button(node('span', {}, state.session.clarifications?.length ? 'Сначала уточним условия' : state.session.hotel_intent && !state.session.selected_plan ? 'Подтвердить новый план ' : 'Посмотреть план ', arrow()), () => mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/select`, { plan_id: plan.id, revision: state.session.revision }), 'button button-full', { disabled: state.session.clarifications?.length > 0 }))));
   }
 
   function suggestionButton(suggestion) {
     return button(node('span', {}, suggestion.label, suggestion.saving > 0 ? node('span', { class: 'saving' }, `−${money(suggestion.saving)}`) : null,
+      suggestion.total_matches > 0 ? node('span', { class: 'saving-comparison' }, `${suggestion.total_matches} ${plural(suggestion.total_matches, 'отель', 'отеля', 'отелей')} · поездка от ${money(suggestion.min_total)}`) : null,
       suggestion.baseline_total != null && suggestion.alternative_total != null ? node('span', { class: 'saving-comparison' }, `Самая доступная поездка: ${money(suggestion.baseline_total)} → ${money(suggestion.alternative_total)}`) : null),
-      () => patchRequirements({ [suggestion.field]: suggestion.value }), 'change-chip', { title: suggestion.note || null });
+      () => patchRequirements(suggestion.patch || { [suggestion.field]: suggestion.value }), 'change-chip', { title: suggestion.note || null });
   }
 
   function alternatives() {
@@ -374,17 +386,18 @@
     if (!all.length && !counterWithoutValue.length) return null;
     return node('section', { class: 'alternatives', 'aria-label': 'Варианты изменения поездки' },
       node('div', {}, smallLabel(session.counterfactuals?.length ? 'Где можно сэкономить' : 'А если немного иначе?'), node('p', {}, 'Посмотрите, как меняется поездка. Остальные условия сохраним.'),
-        session.counterfactuals?.length ? node('p', { class: 'economy-note' }, 'Сравниваем минимальные цены до и после изменения. Отель может измениться. Экономия разных вариантов не складывается.') : null),
+        session.counterfactuals?.length ? node('p', { class: 'economy-note' }, `Сравниваем минимальные цены до и после изменения. ${session.hotel_intent ? 'Сохраняем выбранный отель.' : 'Отель может измениться.'} Экономия разных вариантов не складывается.`) : node('p', { class: 'economy-note' }, 'Проверяем изменения одного условия, затем пары. Сначала — меньше изменений, затем ниже полная стоимость. Это проверенные варианты в демо-каталоге.')),
       node('div', { class: 'chip-row' }, all.map(suggestionButton), counterWithoutValue.map(counter => button(node('span', {}, counter.label, counter.saving > 0 ? node('span', { class: 'saving' }, `−${money(counter.saving)}`) : null), () => sendMessage(counter.label), 'change-chip'))));
   }
 
   function results() {
     const session = state.session;
     return node('div', { class: 'results-content' },
-      node('div', { class: 'section-heading' }, node('h2', {}, session.plans.length ? 'Выберите свой ритм' : 'Такой поездке нужно чуть больше свободы'),
+      node('div', { class: 'section-heading' }, node('h2', {}, session.plans.length ? session.hotel_intent ? 'Ваш отель, новые условия' : 'Выберите свой ритм' : 'Такой поездке нужно чуть больше свободы'),
         session.plans.length ? node('p', {}, `${session.plans.length} ${plural(session.plans.length, 'вариант', 'варианта', 'вариантов')} из ${session.total_matches} подходящих`) : null),
-      session.plans.length ? node('div', { class: 'hotel-grid' }, session.plans.slice(0, 3).map(hotelCard)) : node('div', { class: 'empty-state' },
-        node('span', { class: 'empty-symbol', 'aria-hidden': 'true' }, '↝'), node('h3', {}, 'Все пожелания вместе пока не совпали'), node('p', {}, 'Попробуйте увеличить бюджет, сдвинуть даты или убрать одно из обязательных условий. Мы покажем только подходящие варианты.')),
+      session.plans.length ? node('div', { class: `hotel-grid${session.plans.length === 1 ? ' hotel-grid-single' : ''}` }, session.plans.slice(0, 3).map(hotelCard)) : node('div', { class: 'empty-state' },
+        node('span', { class: 'empty-symbol', 'aria-hidden': 'true' }, '↝'), node('h3', {}, session.hotel_intent ? 'Проверили сохранённый отель' : 'Точных совпадений пока нет'), node('p', {}, session.diagnostic?.message || 'В демонстрационном каталоге нет предложений для этих условий.'),
+        session.hotel_alternative ? button(`${session.hotel_alternative.label} · ${session.hotel_alternative.total_matches}`, () => sendMessage('Покажи другие отели'), 'button button-secondary') : null),
       alternatives(), composer(true), node('p', { class: 'parser-note' }, parserNote()), history());
   }
 
@@ -419,6 +432,7 @@
   }
 
   function checkoutForm(plan) {
+    const needsAnswer = state.session.request_status === 'needs_clarification' || state.session.clarifications?.length > 0;
     const name = node('input', { id: 'traveler-name', name: 'name', autocomplete: 'name', required: true, minlength: 2, maxlength: 100, placeholder: 'Имя и фамилия', oninput: event => { state.checkout.name = event.target.value; } });
     const email = node('input', { id: 'traveler-email', name: 'email', type: 'email', autocomplete: 'email', required: true, maxlength: 254, placeholder: 'you@example.ru', oninput: event => { state.checkout.email = event.target.value; } });
     const agreement = node('input', { id: 'demo-agreement', type: 'checkbox', required: true, onchange: event => { state.checkout.accepted = event.target.checked; } });
@@ -435,7 +449,8 @@
         node('label', { for: name.id }, 'Ваше имя'), name, node('label', { for: email.id }, 'Электронная почта'), email,
         node('p', { class: 'form-note' }, 'Почта сохранится в демозаявке. Письма не отправляем. Используйте тестовые данные.'),
         node('label', { class: 'checkbox-label', for: agreement.id }, agreement, node('span', {}, 'Я понимаю, что это демонстрация. Бронь не создаётся, деньги не списываются.')),
-        node('button', { type: 'submit', class: 'button button-full checkout-submit' }, 'Оформить демозаявку ↗')));
+        needsAnswer ? node('p', { class: 'form-note', role: 'status' }, 'Сначала ответьте на уточнение выше. Текущий вариант сохранён для сравнения; состав и стоимость могут измениться.') : null,
+        node('button', { type: 'submit', class: 'button button-full checkout-submit', disabled: needsAnswer }, needsAnswer ? 'Сначала уточним условия' : 'Оформить демозаявку ↗')));
   }
 
   function selected() {
@@ -443,7 +458,7 @@
     if (!plan) return results();
     return node('div', { class: 'selected-content' }, button('← К вариантам поездки', () => { state.showResults = true; render(); document.querySelector('.section-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 'back-button'),
       node('div', { class: 'mobile-checkout-link' }, node('p', {}, money(plan.price.total), node('span', {}, plan.transport.mode === 'self' ? 'За всех · без самостоятельной дороги' : 'За всю поездку · за всех')), node('a', { href: '#checkout', class: 'button' }, 'К оформлению ↓')),
-      node('div', { class: 'selected-layout' }, tripDetails(plan), checkoutForm(plan)), history());
+      node('div', { class: 'selected-layout' }, tripDetails(plan), checkoutForm(plan)), composer(true), node('p', { class: 'parser-note' }, parserNote()), history());
   }
 
   function downloadOrder() {

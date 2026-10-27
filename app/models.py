@@ -5,6 +5,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+PreferenceField = Literal[
+    "breakfast", "pool", "refundable", "quiet", "direct_only", "max_beach_m", "min_rating", "stars"
+]
+PreferenceMode = Literal["required", "preferred"]
+
 
 class TripRequirements(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -27,6 +32,7 @@ class TripRequirements(BaseModel):
     max_beach_m: int | None = Field(default=None, ge=0, le=10000)
     min_rating: float = Field(default=0, ge=0, le=10)
     stars: int = Field(default=0, ge=0, le=5)
+    preference_modes: dict[PreferenceField, PreferenceMode] = Field(default_factory=dict)
     budget_scope: Literal["trip", "hotel"] = "trip"
     assumptions: list[str] = Field(default_factory=list)
     unsupported: list[str] = Field(default_factory=list)
@@ -37,6 +43,32 @@ class TripRequirements(BaseModel):
         if any(age < 0 or age > 17 for age in ages):
             raise ValueError("Возраст ребёнка должен быть от 0 до 17 лет")
         return ages
+
+
+def is_required(req: TripRequirements, field: str) -> bool:
+    """Absent modes preserve older sessions; quiet was historically a preference."""
+    value = getattr(req, field)
+    active = value is not None if field == "max_beach_m" else bool(value)
+    return (
+        active
+        and req.preference_modes.get(field, "preferred" if field == "quiet" else "required")
+        == "required"
+    )
+
+
+def search_terms(req: TripRequirements) -> dict:
+    """Canonical search meaning, independent of provenance or redundant modes."""
+    terms = req.model_dump(mode="json", exclude={"assumptions", "preference_modes"})
+    modes = {}
+    for field, mode in req.preference_modes.items():
+        value = getattr(req, field)
+        active = value is not None if field == "max_beach_m" else bool(value)
+        default = "preferred" if field == "quiet" else "required"
+        if active and mode != default:
+            modes[field] = mode
+    if modes:
+        terms["preference_modes"] = modes
+    return terms
 
 
 class MessageRequest(BaseModel):
