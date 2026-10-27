@@ -107,7 +107,7 @@ def run():
         page.locator("#traveler-email").fill("demo@example.test")
         page.locator("#demo-agreement").check()
         act(page, lambda: page.locator(".checkout-submit").click())
-        expect(page.locator(".booked-section > h2")).to_contain_text("готова")
+        expect(page.locator(".confirmation-main h2")).to_contain_text("готова")
         reference = page.locator(".order-reference").inner_text()
         page.reload()
         expect(page.locator(".order-reference")).to_have_text(reference)
