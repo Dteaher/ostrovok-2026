@@ -61,3 +61,17 @@ def test_initial_search_is_not_presented_as_a_replan():
         process_message(new_state(), "В Сочи с 6 ноября 2027 на неделю вдвоем до 180 тысяч")
     )
     assert state["changes"] == []
+
+
+def test_lowercase_unknown_city_cannot_keep_sochi_results():
+    async def flow():
+        state = await process_message(new_state(), "В Сочи с 6 ноября 2027 на неделю до 180 тысяч")
+        return await process_message(state, "в прагу на 5 ночей")
+
+    state = asyncio.run(flow())
+    assert state["stage"] == "clarify"
+    assert state["plans"] == []
+    assert state["requirements"]["budget"] == 180000
+    assert state["requirements"]["destination"] == "Сочи"
+    assert state["requirements"]["nights"] == 5
+    assert any(q["field"] == "destination" for q in state["clarifications"])

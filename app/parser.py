@@ -503,9 +503,20 @@ def parse_location_transport(text: str, result: ParsedIntent, original: str = ""
                 word not in non_destinations
                 and word not in NUMBERS
                 and not any(re.match(stem, word) for stem in MONTHS)
-                and (capitalized or directional_change)
             ):
-                result.patch["destination"] = word.capitalize()
+                if capitalized or directional_change:
+                    result.patch["destination"] = word.capitalize()
+                else:
+                    # An unfamiliar lowercase place may be a city or an ordinary
+                    # clause. Preserve the previous location, but block a new
+                    # search until the traveler resolves that uncertainty.
+                    result.questions.append(
+                        {
+                            "field": "destination",
+                            "question": f"Уточните направление в части «{word}». В демо доступен Большой Сочи. Продолжить подбор в нём?",
+                            "options": [{"label": "Подбирать в Большом Сочи", "value": "Сочи"}],
+                        }
+                    )
                 break
     origin = re.search(r"\bиз\s+([а-я][а-я-]+)", text)
     if origin and origin[1] not in (
