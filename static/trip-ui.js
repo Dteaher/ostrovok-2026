@@ -29,16 +29,28 @@ export function requirementsPatch(current, values) {
   return Object.fromEntries(Object.entries(normalized).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(current[key])));
 }
 
-export function assignStayImages(hotels) {
+export function assignStayImages(hotels, previous = {}) {
   const images = {}, used = new Set();
-  for (const hotel of [...hotels].sort((a, b) => a.id.localeCompare(b.id))) {
+  const uniqueHotels = [...new Map(hotels.map(hotel => [hotel.id, hotel])).values()].sort((a, b) => a.id.localeCompare(b.id));
+  for (const hotel of uniqueHotels) {
+    const existing = previous[hotel.id];
+    if (existing) { images[hotel.id] = existing; used.add(existing); }
+  }
+  for (const hotel of uniqueHotels) {
+    if (images[hotel.id]) continue;
     const preferred = hotel.stars <= 3 ? 'room' : hotel.beach_m >= 500 ? 'garden' : (hotel.features || []).includes('pool') ? 'coastal' : 'courtyard';
     const candidates = [...new Set([preferred, 'garden', 'courtyard', 'room', ...((hotel.features || []).includes('pool') ? ['coastal'] : [])])];
-    const choice = candidates.find(name => !used.has(name)) || preferred;
+    const paths = candidates.map(name => `/static/media/stays/demo-${name}.webp`);
+    const choice = paths.find(path => !used.has(path)) || paths[0];
     used.add(choice);
-    images[hotel.id] = `/static/media/stays/demo-${choice}.webp`;
+    images[hotel.id] = choice;
   }
   return images;
+}
+
+export function restoreStayImages(saved) {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+  return Object.fromEntries(Object.entries(saved).filter(([id, path]) => /^h\d{2}$/.test(id) && typeof path === 'string' && /^\/static\/media\/stays\/demo-(coastal|garden|room|courtyard)\.webp$/.test(path)));
 }
 
 export function readablePolicy(policy = '') {

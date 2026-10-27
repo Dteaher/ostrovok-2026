@@ -4,7 +4,13 @@ Generated 2026-10-27 with the built-in `image_gen` tool (not CLI/API). These are
 
 Display label: **Иллюстрация демоотеля**. Amenities, location, and room characteristics must come from the existing catalogue; the illustration is not evidence of an amenity. The coastal image is suitable only for demo accommodation whose catalogue includes a pool; otherwise use the garden or room image. No sea or landmark view is depicted.
 
-Final assets: 1200 × 800 WebP, 3:2. Original generated PNGs remain under `C:/Users/irki_/.codex/generated_images/01a17ea0-dbda-7812-b035-d37f61ac7174/`. Only resizing and WebP encoding were performed; image content was not edited.
+Final assets: 1200 × 800 WebP, 3:2. Original generated PNGs for the initial three assets remain under `C:/Users/irki_/.codex/generated_images/01a17ea0-dbda-7812-b035-d37f61ac7174/`. Only resizing and WebP encoding were performed; image content was not edited.
+
+## courtyard
+
+Asset: `static/media/stays/demo-courtyard.webp`, generated with the built-in imagegen tool on 2026-10-27. Source: `C:/Users/irki_/.codex/generated_images/01a17dfd-debd-76a2-889d-dca6af5414fd/exec-e3b1c6f6-8fec-47c9-9fbf-35b2e5e3eb55.png`. Resized to 1200 × 800 WebP, quality 88. This fourth illustration allows three different properties without pools to have distinct comparison imagery. Assignment is saved per session and reused in the detail and saved-trip views.
+
+Prompt: Use case: photorealistic-natural. Asset type: landscape 3:2 architectural illustration for fictional demo hotel comparison cards in a refined travel website. Create a photorealistic editorial photograph of a modest attractive small guesthouse courtyard: cream plaster two-storey facade, a terracotta-tiled shaded entrance, simple dark wood balcony railing, a few leafy subtropical plants, an inviting paved courtyard with two understated wooden chairs. Natural believable human scale, comfortable 3-star character. Soft clear morning daylight, warm stone and cream with muted olive green, clean composition and tactile textures, eye-level view, restrained premium photographic craft without luxurious facilities. This is fictional accommodation, not an identifiable real property. No pool, no sea, no beach, no mountain or landmark views, no restaurant, no people, no text, no logo, no collage, no watermark. The image must remain clear as a small card and as a wide cropped cover.
 
 ## coastal
 

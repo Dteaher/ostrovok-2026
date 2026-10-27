@@ -19,8 +19,9 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .has-session .session-title-row { margin: 0 0 18px; align-items: center; }
 .has-session .session-title-row .eyebrow { display: none; }
 .has-session .results-title { font-family: var(--serif); font-size: 46px; font-weight: 400; line-height: 1.05; letter-spacing: -.02em; margin: 0; overflow-wrap: anywhere; }
-.has-session .session-intro-selected .session-title-row .eyebrow { display: block; margin: 0 0 6px; font-size: 10px; letter-spacing: 1.8px; color: #806640; }
 .has-session .session-intro-selected .results-title { font-size: 54px; }
+.has-session .progress-back { padding: 0; border: 0; background: none; color: #365767; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.has-session .progress-back:hover { color: #122c3d; }
 .has-session .selected-location { font-size: 14px; color: #4c626e; margin: 7px 0 0; }
 .has-session .selected-total { text-align: right; flex-shrink: 0; padding-left: 22px; }
 .has-session .selected-total strong { display: block; font-size: 32px; font-weight: 600; letter-spacing: -.8px; color: #16364a; line-height: 1.2; }

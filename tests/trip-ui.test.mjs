@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requirementsPatch, assignStayImages, readablePolicy } from '../static/trip-ui.js';
+import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages } from '../static/trip-ui.js';
 
 const current = {
   destination: 'Сочи', check_in: '2026-11-13', nights: 3, adults: 2,
@@ -57,4 +57,12 @@ test('a retained hotel keeps its illustration after replanning and duplicate off
   const images = assignStayImages([first, second]);
   assert.equal(assignStayImages([second], images).h02, images.h02);
   assert.deepEqual(assignStayImages([first, first, second]), images);
+});
+
+test('saved image assignments survive browser-storage round trips and ignore untrusted paths', () => {
+  const saved = JSON.parse(JSON.stringify({ images: { h01: '/static/media/stays/demo-coastal.webp', h02: '/static/media/stays/demo-garden.webp', h03: 'https://other.example/image.jpg' } }));
+  const restored = restoreStayImages(saved.images);
+  assert.deepEqual(restored, { h01: '/static/media/stays/demo-coastal.webp', h02: '/static/media/stays/demo-garden.webp' });
+  assert.equal(assignStayImages([{ id: 'h02', stars: 4, beach_m: 100, features: ['pool'] }], restored).h02, '/static/media/stays/demo-garden.webp');
+  assert.deepEqual(restoreStayImages(null), {});
 });
