@@ -9,16 +9,31 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .has-session button:disabled { cursor: not-allowed; opacity: .56; }
 .has-session :is(button, a, input, textarea, summary):focus-visible, .trips-dialog :is(button, a, summary):focus-visible { outline: 2px solid #416779; outline-offset: 3px; }
 .has-session .results-title:focus { outline: none; }
-.has-session .journey-progress { display: flex; align-items: center; list-style: none; gap: 26px; padding: 0; margin: 0 0 25px; color: #69747a; font-size: 12px; }
+.has-session .journey-progress { display: flex; align-items: center; list-style: none; gap: 26px; padding: 0; margin: 0 0 18px; color: #53636c; font-size: 12px; }
 .has-session .journey-progress li { display: flex; align-items: center; gap: 8px; }
 .has-session .journey-progress li>span { font-size: 10px; letter-spacing: 1px; color: #7a7569; }
 .has-session .journey-progress .is-current { color: #172c39; font-weight: 700; }
 .has-session .journey-progress .is-current>span { color: #9a723f; }
 .has-session .journey-progress .is-complete>span { color: #486757; }
-.has-session .session-intro { padding: 0; margin: 0 0 26px; }
-.has-session .session-title-row { margin: 0 0 23px; align-items: center; }
+.has-session .session-intro { padding: 0; margin: 0 0 22px; }
+.has-session .session-title-row { margin: 0 0 18px; align-items: center; }
 .has-session .session-title-row .eyebrow { display: none; }
-.has-session .results-title { font-family: var(--serif); font-size: 46px; font-weight: 500; line-height: 1.05; letter-spacing: -.02em; margin: 0; }
+.has-session .results-title { font-family: var(--serif); font-size: 46px; font-weight: 400; line-height: 1.05; letter-spacing: -.02em; margin: 0; overflow-wrap: anywhere; }
+.has-session .session-intro-selected .session-title-row .eyebrow { display: block; margin: 0 0 6px; font-size: 10px; letter-spacing: 1.8px; color: #806640; }
+.has-session .session-intro-selected .results-title { font-size: 54px; }
+.has-session .selected-location { font-size: 14px; color: #4c626e; margin: 7px 0 0; }
+.has-session .selected-total { text-align: right; flex-shrink: 0; padding-left: 22px; }
+.has-session .selected-total strong { display: block; font-size: 32px; font-weight: 600; letter-spacing: -.8px; color: #16364a; line-height: 1.2; }
+.has-session .selected-total span { display: block; font-size: 13px; color: #526672; margin-top: 6px; }
+.has-session .edit-conditions>span { display: flex; align-items: center; gap: 9px; }
+.has-session .session-context { color: #526570; font-size: 13px; line-height: 1.7; margin-top: 12px; }
+.has-session .session-context summary { display: flex; width: fit-content; align-items: center; gap: 8px; cursor: pointer; list-style: none; min-height: 28px; }
+.has-session .session-context summary::-webkit-details-marker { display: none; }
+.has-session .session-context summary>svg { color: #47705e; }
+.has-session .session-context summary>span { margin-left: 10px; }
+.has-session .session-context[open] summary>span { transform: rotate(45deg); }
+.has-session .session-context p { margin: 10px 0; max-width: 900px; }
+.has-session .session-context ul { padding-left: 20px; max-width: 900px; }
 .has-session .demo-tag { color: #586360; background: transparent; border-color: #d9d6ce; font-size: 11px; padding: 5px 10px; flex-shrink: 0; }
 .has-session .status-dot { background: #97805c; }
 .has-session .conditions { padding: 14px 0 16px; margin: 0; border-block: 1px solid #deded5; }
@@ -61,19 +76,19 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .has-session .hotel-body, .has-session .hotel-card:last-child:nth-child(3) .hotel-body { padding: 20px; flex: 1; min-height: 0; display: flex; flex-direction: column; width: auto; }
 .has-session .hotel-meta { font-size: 12px; color: #5d6c71; }
 .has-session .rating { border-radius: 4px; background: #edf1eb; color: #345748; font-size: 13px; min-height: 26px; min-width: 33px; }
-.has-session .hotel-body h3 { margin: 10px 0 17px; font-family: var(--serif); font-size: 33px; line-height: 1.05; font-weight: 600; letter-spacing: -.5px; overflow-wrap: anywhere; }
+.has-session .hotel-body h3 { margin: 10px 0 17px; font-family: var(--serif); font-size: 34px; line-height: 1.05; font-weight: 400; letter-spacing: -.5px; overflow-wrap: anywhere; }
 .has-session .stay-facts { margin: 0; display: grid; gap: 7px; padding: 0 0 15px; border-bottom: 1px solid #ebe9e3; }
-.has-session .stay-facts>div { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 13px; line-height: 1.5; }
-.has-session .stay-facts dt { color: #627177; flex-shrink: 0; }
+.has-session .stay-facts>div { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 14px; line-height: 1.5; }
+.has-session .stay-facts dt { color: #4f626b; flex-shrink: 0; }
 .has-session .stay-facts dd { color: #213d4c; text-align: right; font-weight: 500; margin: 0; }
 .has-session .fit-list { margin: 14px 0 7px; }
 .has-session .fit-list p { font-size: 13px; line-height: 1.5; margin: 0; color: #315447; }
 .has-session .fit-list p>span { color: #476a52; }
-.has-session .compromise { margin: 0 0 17px; color: #665a48; font-size: 12px; line-height: 1.6; }
+.has-session .compromise { margin: 0 0 17px; color: #665a48; font-size: 13px; line-height: 1.6; }
 .has-session .compromise>span { font-weight: 600; }
 .has-session .card-bottom { padding-top: 15px; border-top: 1px solid #e7e5dd; margin-top: auto; }
 .has-session .total-price { margin: 0 0 8px; font-size: 29px; line-height: 1.15; color: #172f40; font-weight: 600; letter-spacing: -.8px; }
-.has-session .total-price>span { margin-top: 5px; display: block; color: #5c6d75; font-size: 11px; font-weight: 400; letter-spacing: 0; line-height: 1.5; }
+.has-session .total-price>span { margin-top: 5px; display: block; color: #52636e; font-size: 12px; font-weight: 400; letter-spacing: 0; line-height: 1.5; }
 .has-session .card-price-details { font-size: 12px; color: #456071; margin: 0 0 15px; }
 .has-session .card-price-details summary { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .has-session .card-price-details dl { display: grid; gap: 6px; margin-top: 10px; padding: 10px 0; }
@@ -115,17 +130,17 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .has-session .back-button { font-size: 13px; color: #456473; margin-bottom: 18px; }
 .has-session .selected-layout { display: grid; grid-template-columns: minmax(0, 1fr) 350px; align-items: start; gap: 36px; }
 .has-session .trip-detail-content { min-width: 0; }
-.has-session .plan-hero { position: relative; overflow: hidden; height: 240px; border-radius: 8px; margin-bottom: 22px; }
+.has-session .plan-hero { position: relative; overflow: hidden; height: 280px; border-radius: 8px; margin-bottom: 18px; }
 .has-session .plan-hero img { width: 100%; height: 100%; object-fit: cover; object-position: center 57%; }
 .has-session .plan-hero .image-note { position: absolute; bottom: 12px; right: 12px; }
 .has-session .detail-summary { padding: 0 0 22px; border: 0; background: transparent; }
 .has-session .detail-summary>.eyebrow { display: none; }
-.has-session .detail-summary h2 { font-family: var(--serif); font-weight: 600; font-size: 40px; line-height: 1.05; margin-bottom: 8px; letter-spacing: -.7px; overflow-wrap: anywhere; }
+.has-session .detail-summary h2 { font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1.05; margin-bottom: 8px; letter-spacing: -.7px; overflow-wrap: anywhere; }
 .has-session .detail-location { font-size: 13px; color: #536c78; margin-bottom: 12px; }
 .has-session .hotel-description { color: #526976; font-size: 14px; line-height: 1.65; max-width: 760px; margin-bottom: 20px; }
 .has-session .detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 17px 25px; border-block: 1px solid #deded5; margin: 0; padding: 20px 0; }
 .has-session .detail-facts>div { padding: 0; border: 0; display: block; font-size: 14px; }
-.has-session .detail-facts dt { color: #64747a; font-size: 12px; margin: 0 0 4px; }
+.has-session .detail-facts dt { color: #50646e; font-size: 13px; margin: 0 0 4px; }
 .has-session .detail-facts dd { margin: 0; color: #213f50; font-weight: 500; line-height: 1.5; }
 .has-session .rate-policy { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 15px; padding: 14px 0; border-bottom: 1px solid #deded5; font-size: 13px; line-height: 1.65; color: #665238; }
 .has-session .rate-policy strong { font-weight: 600; }
@@ -136,13 +151,15 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .has-session .detail-compromises { border-left: 3px solid #b5a07c; background: #f1eee7; border-radius: 0; padding: 14px 17px; margin: 18px 0 0; }
 .has-session .detail-compromises h3 { color: #67573f; }
 .has-session .detail-compromises ul { font-size: 13px; line-height: 1.65; }
-.has-session .timeline-section { padding: 20px 0 0; margin: 0; border-top: 1px solid #deded5; }
+.has-session .timeline-section { padding: 20px 0 0; margin: 0; border-top: 1px solid #deded5; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 26px; }
+.has-session .timeline-section>h3, .has-session .timeline-section>.route-details, .has-session .timeline-section>.policy-note { grid-column: 1 / -1; }
 .has-session .timeline-section h3 { font-family: var(--sans); font-size: 18px; font-weight: 600; margin-bottom: 17px; }
 .has-session .route-group { margin-bottom: 20px; }
-.has-session .route-group>h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.3px; color: #69716d; margin-bottom: 8px; }
+.has-session .route-group>h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.3px; color: #4f635e; margin-bottom: 12px; }
 .has-session .timeline { margin: 0; padding: 0; }
-.has-session .timeline li { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 17px; padding: 10px 0; min-height: 0; border: 0; }
+.has-session .timeline li { display: grid; grid-template-columns: 45px minmax(0, 1fr); gap: 15px; padding: 9px 0 9px 17px; min-height: 0; border-left: 1px solid #c7cfc8; position: relative; }
 .has-session .timeline li::before, .has-session .timeline li::after { content: none; }
+.has-session .timeline li::before { content: ''; position: absolute; top: 16px; left: -4px; width: 7px; height: 7px; border-radius: 50%; background: #9c8968; }
 .has-session .timeline-time { font-size: 12px; color: #5c737e; line-height: 1.6; text-align: left; padding: 0; }
 .has-session .timeline strong { font-size: 14px; color: #244353; font-weight: 600; }
 .has-session .timeline p { font-size: 13px; line-height: 1.6; color: #596d77; }
@@ -168,7 +185,7 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .has-session .checkout-form>.small { font-size: 13px; line-height: 1.6; color: #596f7b; margin-bottom: 15px; }
 .has-session .checkout-form>label:not(.checkbox-label) { font-size: 13px; color: #28495c; margin-top: 12px; margin-bottom: 6px; }
 .has-session .checkout-form input:not([type=checkbox]) { border: 1px solid #bfcbd0; background: #fff; color: #1a3749; border-radius: 5px; min-height: 44px; font-size: 14px; padding: 10px 12px; }
-.has-session .form-note { color: #627580; font-size: 11px; line-height: 1.6; }
+.has-session .form-note { color: #526875; font-size: 12px; line-height: 1.6; }
 .has-session .checkbox-label { font-size: 12px; line-height: 1.6; color: #435d6d; align-items: start; gap: 10px; margin: 18px 0; }
 .has-session .checkbox-label input { margin-top: 3px; accent-color: #17394d; width: 16px; height: 16px; flex-shrink: 0; }
 .has-session .checkout-submit { font-size: 13px; }
@@ -208,7 +225,7 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .trips-dialog .saved-trip-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .trips-dialog .saved-trip-thumbnail { flex: 0 0 108px; width: 108px; height: 90px; border-radius: 5px; overflow: hidden; }
 .trips-dialog .saved-trip-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
-.trips-dialog .saved-trip-inner strong { font-family: var(--serif); font-size: 30px; font-weight: 600; line-height: 1.1; }
+.trips-dialog .saved-trip-inner strong { font-family: var(--serif); font-size: 30px; font-weight: 400; line-height: 1.1; }
 .trips-dialog .saved-trip-inner span>span:not(.saved-trip-price) { font-size: 13px; line-height: 1.6; color: #5a707c; }
 .trips-dialog .saved-trip-status { color: #496d58 !important; font-size: 11px !important; }
 .trips-dialog .saved-trip-price { font-size: 17px; flex-shrink: 0; color: #244c62; }
@@ -217,6 +234,38 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
 .trips-dialog .trips-empty h3 { font-family: var(--serif); font-size: 31px; }
 .trips-dialog .trips-empty p { font-size: 14px; color: #586e7b; }
 .trips-dialog .button { min-height: 44px; font-size: 14px; border-radius: 6px; }
+.trip-editor { width: min(720px, calc(100% - 40px)); padding: 0; max-height: calc(100dvh - 40px); overflow: auto; overscroll-behavior: contain; border: 1px solid #d6d9d0; border-radius: 12px; background: #faf8f5; color: #193849; box-shadow: 0 28px 100px #102a3d38; animation: editor-appear .18s ease-out; }
+.trip-editor::backdrop { background: #122b3e80; }
+.trip-editor .editor-shell { padding: 28px 32px; }
+.trip-editor .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 7px; }
+.trip-editor .eyebrow { font-size: 10px; color: #806640; letter-spacing: 1.6px; margin: 0 0 7px; }
+.trip-editor h2 { font-family: var(--serif); font-size: 43px; font-weight: 400; line-height: 1; margin: 0; }
+.trip-editor .dialog-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; background: transparent; border: 1px solid #ccd4d1; border-radius: 50%; color: #284b5b; cursor: pointer; }
+.trip-editor .dialog-close:hover { background: #efece4; }
+.trip-editor .editor-description { font-size: 14px; line-height: 1.6; color: #526875; margin: 0 0 22px; }
+.trip-editor .editor-fields { padding: 0; margin: 0; border: 0; min-width: 0; display: grid; gap: 17px; }
+.trip-editor .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.trip-editor .editor-date-grid { display: grid; grid-template-columns: 1.3fr 1.2fr .6fr; gap: 18px; }
+.trip-editor .editor-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.trip-editor label { margin: 0; color: #274858; font-size: 13px; font-weight: 600; line-height: 1.3; }
+.trip-editor :is(input, select) { display: block; width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; font-family: var(--sans); font-size: 15px; line-height: 1.5; color: #193849; background: #fff; border: 1px solid #b9c7cc; border-radius: 6px; color-scheme: light; }
+.trip-editor input[type=date] { min-inline-size: 0; }
+.trip-editor :is(input, select):hover { border-color: #6d8995; }
+.trip-editor :is(button, input, select):focus-visible { outline: 2px solid #416779; outline-offset: 3px; }
+.trip-editor :is(input, select):disabled { background: #eeede7; color: #6b757a; }
+.trip-editor .editor-hint { font-size: 12px; line-height: 1.5; color: #526875; margin: 0; }
+.trip-editor .editor-travel-note { margin-top: -8px; }
+.trip-editor .editor-ages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.trip-editor .editor-ages[hidden] { display: none; }
+.trip-editor .editor-preserved { display: flex; align-items: start; gap: 9px; font-size: 12px; line-height: 1.6; color: #406053; margin: 18px 0 0; }
+.trip-editor .editor-preserved svg { flex-shrink: 0; margin-top: 2px; }
+.trip-editor .editor-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; position: sticky; bottom: -28px; margin: 20px 0 0; padding: 18px 0 0; background: #faf8f5; border-top: 1px solid #daddd5; }
+.trip-editor .button { min-height: 46px; padding: 12px 18px; border-radius: 6px; font-size: 14px; font-weight: 600; }
+.trip-editor .button-secondary { background: transparent; border: 1px solid #bcc9cc; color: #284a5b; }
+.trip-editor .editor-submit { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.trip-editor button:disabled { cursor: wait; opacity: .65; }
+.trip-editor .editor-error { padding: 12px 14px; margin: 15px 0 0; background: #fff0e9; color: #803e2b; border: 1px solid #d9b8a9; border-radius: 6px; font-size: 13px; line-height: 1.6; }
+@keyframes editor-appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @media (min-width: 1000px) {
   .has-session .hotel-grid.hotel-grid-single { grid-template-columns: 1fr; max-width: 100%; }
   .has-session .hotel-grid-single .hotel-card { display: grid; grid-template-columns: .9fr 1.1fr; max-width: 900px; }
@@ -257,6 +306,11 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
   .has-session .journey-progress li>span { font-size: 9px; }
   .has-session .session-title-row { display: block; margin-bottom: 17px; }
   .has-session .results-title { font-size: 36px; }
+  .has-session .session-intro-selected .session-title-row { display: flex; flex-direction: column; align-items: start; gap: 14px; }
+  .has-session .session-intro-selected .results-title { font-size: 42px; }
+  .has-session .selected-total { padding-left: 0; text-align: left; }
+  .has-session .selected-total strong { font-size: 28px; }
+  .has-session .selected-total span { margin-top: 3px; font-size: 12px; }
   .has-session .session-title-row .demo-tag { margin-top: 10px; display: inline-flex; }
   .has-session .conditions { padding-block: 12px; }
   .has-session .conditions-heading { gap: 8px; }
@@ -308,6 +362,8 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
   .has-session .detail-facts>div { font-size: 13px; }
   .has-session .detail-reasons ul { font-size: 13px; }
   .has-session .timeline li { grid-template-columns: 83px minmax(0,1fr); gap: 12px; padding-block: 9px; }
+  .has-session .timeline-section { display: block; }
+  .has-session .timeline li { grid-template-columns: 45px minmax(0,1fr); }
   .has-session .timeline-time { font-size: 11px; }
   .has-session .timeline strong { font-size: 13px; }
   .has-session .timeline p { font-size: 12px; }
@@ -326,9 +382,22 @@ body.has-session #main.wrap { width: calc(100% - 80px); max-width: 1240px; paddi
   .trips-dialog .saved-trip-copy { grid-column: 2; }
   .trips-dialog .saved-trip-inner strong { font-size: 26px; }
   .trips-dialog .saved-trip-price { font-size: 16px; grid-column: 2; }
+  .trip-editor { width: calc(100% - 20px); max-height: calc(100dvh - 20px); border-radius: 10px; }
+  .trip-editor .editor-shell { padding: 23px 18px; }
+  .trip-editor h2 { font-size: 38px; }
+  .trip-editor .editor-description { font-size: 13px; margin-bottom: 18px; }
+  .trip-editor .editor-date-grid { grid-template-columns: minmax(0, 1fr) 90px; gap: 15px 12px; }
+  .trip-editor .editor-date-grid>.editor-field:first-child { grid-column: 1 / -1; }
+  .trip-editor .editor-grid { gap: 12px; }
+  .trip-editor .editor-ages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trip-editor label { font-size: 12px; }
+  .trip-editor :is(input, select) { font-size: 16px; padding-inline: 9px; }
+  .trip-editor .editor-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; bottom: -23px; padding-bottom: 2px; }
+  .trip-editor .button { padding-inline: 12px; font-size: 12px; }
+  .trip-editor .editor-submit { gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .has-session *, .trips-dialog * { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+  .has-session *, .trips-dialog *, .trip-editor, .trip-editor * { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
 @media (max-width: 360px) {
   .has-session .site-header { padding-inline: 14px; gap: 10px; }

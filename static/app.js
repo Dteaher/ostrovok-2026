@@ -1,3 +1,5 @@
+import { requirementsPatch, assignStayImages, readablePolicy } from './trip-ui.js';
+
 (() => {
   'use strict';
 
@@ -122,7 +124,7 @@
     dialog.append(node('div', { class: 'dialog-heading' }, node('div', {}, smallLabel('Вернёмся к вашим планам'), node('h2', { id: 'trips-title' }, 'Мои поездки')), button(icon('close'), close, 'dialog-close', { 'aria-label': 'Закрыть мои поездки' })), node('p', { class: 'dialog-description' }, 'Ваши подборы и демозаявки. Сохранены в этом браузере.'), notice, list);
     if (!trips.length) list.append(node('div', { class: 'trips-empty' }, icon('bag', 40), node('h3', {}, 'Ваша первая история ещё впереди'), node('p', {}, 'Расскажите об отдыхе — здесь останутся ваши подборы и планы.'), button('Начать путешествие', () => { close(); seedIdea(''); }, 'button')));
     trips.forEach(trip => {
-      const thumbnail = typeof trip.thumbnail === 'string' && /^\/static\/media\/stays\/demo-(coastal|garden|room)\.webp$/.test(trip.thumbnail) ? trip.thumbnail : '/static/media/stays/demo-garden.webp';
+      const thumbnail = typeof trip.thumbnail === 'string' && /^\/static\/media\/stays\/demo-(coastal|garden|room|courtyard)\.webp$/.test(trip.thumbnail) ? trip.thumbnail : '/static/media/stays/demo-garden.webp';
       const action = button(node('span', { class: 'saved-trip-inner' }, node('span', { class: 'saved-trip-thumbnail' }, node('img', { src: thumbnail, alt: '', width: 120, height: 90, loading: 'lazy' })), node('span', { class: 'saved-trip-copy' }, node('span', { class: 'saved-trip-status' }, trip.stage === 'booked' ? 'Демозаявка оформлена' : 'Подбор сохранён'), node('strong', {}, trip.title), node('span', {}, `${trip.destination} · ${date(trip.date)}`)), node('span', { class: 'saved-trip-price' }, trip.total ? money(trip.total) : 'Продолжить', icon('arrow'))), async () => {
         list.querySelectorAll('button').forEach(control => { control.disabled = true; });
         notice.textContent = 'Возвращаем ваш план…';
@@ -180,12 +182,14 @@
     if (state.pending) return;
     state.pending = true;
     state.error = '';
+    let updated = null;
     setPending(true);
     announce('Собираем ваш план. Пожалуйста, подождите.');
     try {
       const session = await request(path, { method, body: JSON.stringify(body) });
       if (session.selected_plan?.id !== state.session?.selected_plan?.id) state.checkout.accepted = false;
       state.session = session;
+      updated = session;
       state.showResults = false;
       state.draft = '';
       saveSession();
@@ -203,15 +207,21 @@
     } finally {
       state.pending = false;
       render();
-      if (state.error) document.querySelector('.alert-error')?.focus();
-      else document.querySelector('[data-view-heading]')?.focus();
+      if (!document.querySelector('.trip-editor[open]')) {
+        if (state.error) document.querySelector('.alert-error')?.focus();
+        else {
+          document.querySelector('[data-view-heading]')?.focus({ preventScroll: true });
+          window.scrollTo({ top: 0, behavior: 'instant' });
+        }
+      }
     }
+    return updated;
   }
 
   function setPending(pending) {
     main.setAttribute('aria-busy', String(pending));
     newTrip.disabled = pending;
-    for (const control of main.querySelectorAll('button, textarea, input')) control.disabled = pending;
+    for (const control of main.querySelectorAll('button, textarea, input, select')) control.disabled = pending;
     const submit = main.querySelector('.composer-submit');
     if (submit) {
       submit.classList.toggle('is-loading', pending);
@@ -307,6 +317,95 @@
         node('p', { class: 'journey-parser-note' }, parserNote())));
   }
 
+  function editConditions() {
+    if (state.pending || !state.session || state.session.stage === 'booked' || document.querySelector('.trip-editor')) return;
+    const current = state.session.requirements;
+    const opener = document.activeElement;
+    let saving = false;
+    const dialog = node('dialog', { class: 'trip-editor', 'aria-labelledby': 'editor-title', 'aria-describedby': 'editor-description' });
+    const select = (name, choices, value, attrs = {}) => node('select', { name, id: `edit-${name}`, ...attrs }, choices.map(([key, label]) => node('option', { value: key, selected: String(key) === String(value) }, label)));
+    const input = (name, value, attrs = {}) => node('input', { name, id: `edit-${name}`, value: value ?? '', ...attrs });
+    const field = (label, control, hint) => node('div', { class: 'editor-field' }, node('label', { for: control.id }, label), control, hint ? node('span', { class: 'editor-hint' }, hint) : null);
+    const directionChoices = [...new Set([current.destination, ...destinations.map(item => item.name)].filter(Boolean))].map(value => [value, value]);
+    const destination = select('destination', directionChoices, current.destination || 'Сочи', { required: true });
+    const checkIn = input('check_in', current.check_in, { type: 'date', min: futureDate(0), required: true });
+    const length = input('nights', current.nights, { type: 'number', min: 1, max: 30, step: 1, required: true, inputmode: 'numeric' });
+    const adults = input('adults', current.adults, { type: 'number', min: 1, max: 8, step: 1, required: true, inputmode: 'numeric' });
+    const childCount = select('children', Array.from({ length: 7 }, (_, n) => [n, n === 0 ? 'Без детей' : `${n} ${plural(n, 'ребёнок', 'ребёнка', 'детей')}`]), current.children_ages.length);
+    const ageFields = node('div', { class: 'editor-ages' });
+    let ages = current.children_ages.map(String);
+    const renderAges = () => {
+      const count = Number(childCount.value);
+      ages = Array.from({ length: count }, (_, i) => ages[i] ?? '');
+      ageFields.replaceChildren(...ages.map((age, i) => {
+        const control = select(`child-${i}`, [['', 'Выберите'], ...Array.from({ length: 18 }, (_, n) => [n, `${n} ${plural(n, 'год', 'года', 'лет')}`])], age, { required: true });
+        control.addEventListener('change', () => { ages[i] = control.value; });
+        return field(`Возраст ребёнка ${i + 1}`, control);
+      }));
+      ageFields.hidden = count === 0;
+    };
+    childCount.addEventListener('change', renderAges);
+    renderAges();
+    const budget = input('budget', current.budget, { type: 'number', min: 1000, max: 10000000, step: 1, inputmode: 'numeric', placeholder: 'Без ограничения' });
+    const scope = select('budget_scope', [['trip', 'На всю поездку'], ['hotel', 'На проживание']], current.budget_scope);
+    const transport = select('transport', [['flight', 'Самолёт'], ['train', 'Поезд'], ['self', 'Своим ходом']], current.transport);
+    const origin = input('origin', current.origin, { type: 'text', maxlength: 100, required: true, autocomplete: 'off' });
+    const travelNote = node('p', { class: 'editor-hint editor-travel-note' });
+    const syncTransport = () => {
+      origin.disabled = transport.value === 'self';
+      origin.required = transport.value !== 'self';
+      travelNote.textContent = transport.value === 'self' ? 'Самостоятельная дорога и трансфер не входят в расчёт.' : 'В демокаталоге доступны маршруты из Москвы.';
+    };
+    transport.addEventListener('change', syncTransport);
+    syncTransport();
+    const error = node('p', { class: 'editor-error', role: 'alert', tabindex: '-1', hidden: true });
+    const close = () => { if (!saving) dialog.close(); };
+    const cancel = button('Отмена', close, 'button button-secondary');
+    const submit = node('button', { type: 'submit', class: 'button editor-submit' }, 'Применить изменения', icon('arrow', 18));
+    const closeButton = button(icon('close'), close, 'dialog-close', { 'aria-label': 'Закрыть условия поездки' });
+    const fields = node('fieldset', { class: 'editor-fields' },
+      node('legend', { class: 'sr-only' }, 'Основные условия'),
+      node('div', { class: 'editor-date-grid' }, field('Направление', destination), field('Дата заезда', checkIn), field('Ночей', length)),
+      node('div', { class: 'editor-grid' }, field('Взрослых', adults, 'От 18 лет'), field('Детей', childCount, 'До 17 лет включительно')), ageFields,
+      node('div', { class: 'editor-grid' }, field('Бюджет, ₽', budget), field('На что рассчитан', scope)),
+      node('div', { class: 'editor-grid' }, field('Как добраться', transport), field('Город отправления', origin)), travelNote);
+    const form = node('form', { class: 'editor-form', onsubmit: async event => {
+      event.preventDefault();
+      if (saving) return;
+      error.hidden = true;
+      let patch;
+      try {
+        patch = requirementsPatch(current, { destination: destination.value, check_in: checkIn.value, nights: length.value, adults: adults.value, children_ages: ages, budget: budget.value, budget_scope: scope.value, transport: transport.value, origin: origin.value });
+      } catch (problem) { error.textContent = problem.message; error.hidden = false; error.focus(); return; }
+      if (!Object.keys(patch).length) { close(); return; }
+      saving = true;
+      fields.disabled = true; cancel.disabled = true; closeButton.disabled = true; submit.disabled = true;
+      submit.textContent = 'Пересчитываем поездку…';
+      dialog.setAttribute('aria-busy', 'true');
+      const updated = await patchRequirements(patch);
+      saving = false;
+      if (updated) {
+        dialog.close();
+        document.querySelector('[data-view-heading]')?.focus({ preventScroll: true });
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      } else {
+        fields.disabled = false; cancel.disabled = false; closeButton.disabled = false; submit.disabled = false;
+        submit.replaceChildren('Попробовать снова', icon('arrow', 18));
+        dialog.setAttribute('aria-busy', 'false');
+        error.textContent = state.error || 'Не удалось сохранить изменения. Попробуйте ещё раз.';
+        error.hidden = false;
+        error.focus();
+      }
+    } }, fields, node('p', { class: 'editor-preserved' }, icon('check', 17), 'Пожелания к отелю сохранятся. Проверим наличие и стоимость заново.'), error,
+      node('div', { class: 'editor-actions' }, cancel, submit));
+    dialog.append(node('div', { class: 'editor-shell' }, node('div', { class: 'dialog-heading' }, node('div', {}, smallLabel('Детали путешествия'), node('h2', { id: 'editor-title' }, 'Ваша поездка')), closeButton), node('p', { id: 'editor-description', class: 'editor-description' }, 'Уточните детали — остальное мы сохраним.'), form));
+    dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+    dialog.addEventListener('click', event => { if (event.target === dialog) { const rect = dialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close(); } });
+    dialog.addEventListener('close', () => { dialog.remove(); if (opener?.isConnected) opener.focus({ preventScroll: true }); else document.querySelector('#edit-conditions')?.focus({ preventScroll: true }); });
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
   function conditions(requirements) {
     const r = requirements;
     const people = [`${r.adults} ${plural(r.adults, 'взрослый', 'взрослых', 'взрослых')}`];
@@ -320,10 +419,7 @@
     if (r.min_rating) terms.push(`Оценка от ${r.min_rating} · ${priority('min_rating')}`);
     if (r.stars) terms.push(`От ${r.stars} звёзд · ${priority('stars')}`);
     return node('section', { class: 'conditions', 'aria-label': 'Сохранённые условия поездки' },
-      node('div', { class: 'conditions-heading' }, smallLabel('Условия поездки'), button('Изменить пожелания', () => {
-        const input = document.querySelector('#refine-message');
-        input?.scrollIntoView({ behavior: 'smooth', block: 'center' }); input?.focus({ preventScroll: true });
-      }, 'text-button', { hidden: state.session.stage === 'booked' })),
+      node('div', { class: 'conditions-heading' }, smallLabel('Условия поездки'), button(node('span', {}, 'Изменить условия', icon('arrow', 15)), editConditions, 'text-button edit-conditions', { id: 'edit-conditions', hidden: state.session.stage === 'booked' })),
       node('ul', { class: 'condition-list' }, terms.map((term, index) => node('li', { class: index < 5 ? 'condition-primary' : 'condition-wish' }, term))));
   }
 
@@ -331,23 +427,30 @@
     const session = state.session;
     const assumptions = [...new Set([...(session.assumptions || []), ...(session.requirements.assumptions || [])])];
     const selectedView = session.stage === 'selected' && !state.showResults;
+    const selectedPlan = selectedView ? session.selected_plan : null;
     const phase = session.stage === 'booked' ? 2 : selectedView ? 1 : 0;
-    const title = session.stage === 'clarify' ? 'Уточним вашу поездку' : session.stage === 'booked' ? 'План сохранён' : selectedView ? 'Ваш план поездки' : session.hotel_intent ? 'Новый план в вашем отеле' : 'Отели для вашей поездки';
+    const title = session.stage === 'clarify' ? 'Уточним вашу поездку' : session.stage === 'booked' ? 'План сохранён' : selectedPlan ? selectedPlan.hotel.name : session.hotel_intent ? 'Новый план в вашем отеле' : 'Отели для вашей поездки';
     const routineReply = /^(Нашёл|Вы выбрали|Пересобрал|Сохранил отель|Эти условия уже действуют)/.test(session.assistant_message || '');
     const requiresAttention = session.clarifications?.length || session.hypothetical || !session.plans.length || !routineReply;
     const reply = node('p', {}, session.assistant_message);
-    return node('section', { class: 'session-intro' },
+    const context = session.stage !== 'booked' ? node('details', { class: 'session-context' },
+      node('summary', {}, icon('check', 16), 'Как подобрали поездку', node('span', { 'aria-hidden': 'true' }, '+')),
+      !requiresAttention ? reply : null,
+      assumptions.length ? node('ul', {}, assumptions.map(value => node('li', {}, value))) : null,
+      (session.requirements.unsupported || []).length ? node('ul', {}, session.requirements.unsupported.map(value => node('li', {}, 'Пока не можем учесть: ' + value))) : null) : null;
+    return node('section', { class: `session-intro${selectedView ? ' session-intro-selected' : ''}` },
       node('ol', { class: 'journey-progress', 'aria-label': 'Этапы поездки' }, ['Подбор отелей', 'План и оформление', 'Подтверждение'].map((label, index) => node('li', { class: index === phase ? 'is-current' : index < phase ? 'is-complete' : '', 'aria-current': index === phase ? 'step' : null }, node('span', { 'aria-hidden': 'true' }, index < phase ? '✓' : `0${index + 1}`), label))),
-      node('div', { class: 'session-title-row' }, node('div', {}, smallLabel('От желания к маршруту'),
-        node('h1', { class: 'results-title', tabindex: '-1', 'data-view-heading': true }, title)),
-        node('span', { class: 'demo-tag' }, node('span', { class: 'status-dot' }), 'Демонстрационный подбор')),
+      node('div', { class: 'session-title-row' }, node('div', {}, smallLabel(selectedView ? 'Ваш план поездки' : 'От желания к маршруту'),
+        node('h1', { class: 'results-title', tabindex: '-1', 'data-view-heading': true }, title),
+        selectedPlan ? node('p', { class: 'selected-location' }, `${selectedPlan.hotel.area} · ${selectedPlan.hotel.stars} звезды · оценка ${String(selectedPlan.hotel.rating).replace('.', ',')}`) : null),
+        selectedPlan ? node('div', { class: 'selected-total' }, node('strong', {}, money(selectedPlan.price.total)), node('span', {}, `За всех · ${nights(selectedPlan.dates.nights)} · ${tripScope(selectedPlan)}`)) : node('span', { class: 'demo-tag' }, node('span', { class: 'status-dot' }), 'Демонстрационный подбор')),
       session.stage === 'booked' ? null : conditions(session.requirements),
-      session.stage === 'booked' || session.clarifications?.length ? null : requiresAttention ? node('div', { class: 'assistant-message', role: 'status' }, node('span', { class: 'assistant-mark', 'aria-hidden': 'true' }, 'О!'), reply) : node('details', { class: 'assistant-message assistant-disclosure' }, node('summary', {}, node('span', { class: 'verified-mark', 'aria-hidden': 'true' }, '✓'), session.changes?.length ? 'Изменения применены, предложения проверены' : 'Варианты проверены по вашим условиям', node('span', {}, 'Как подбирали')), reply),
+      session.stage !== 'booked' && !session.clarifications?.length && requiresAttention ? node('div', { class: 'assistant-message', role: 'status' }, node('span', { class: 'assistant-mark', 'aria-hidden': 'true' }, 'О!'), reply) : null,
       session.changes?.length ? node('p', { class: 'changes-note' }, 'Обновили: ', session.changes.map(change => change.summary || change.label || change.field).join('; '), '. Остальные условия сохранены.') : null,
-      session.hotel_intent && session.stage !== 'booked' ? node('div', { class: 'hotel-intent-note' }, node('p', {}, 'Сохраняем ', node('strong', {}, session.hotel_intent.name)), button('Рассмотреть другие отели', () => sendMessage('Покажи другие отели'), 'text-button')) : null,
+      session.hotel_intent && session.stage !== 'booked' && !selectedView ? node('div', { class: 'hotel-intent-note' }, node('p', {}, 'Сохраняем ', node('strong', {}, session.hotel_intent.name)), button('Рассмотреть другие отели', () => sendMessage('Покажи другие отели'), 'text-button')) : null,
       session.stage !== 'clarify' && session.clarifications?.length ? clarificationQuestions() : null,
       session.hypothetical?.total_matches > 0 ? node('div', { class: 'hypothetical-action' }, button('Применить это изменение', () => patchRequirements(session.hypothetical.patch), 'choice-chip'), node('span', {}, 'Только после нажатия изменим условия и пересчитаем предложение.')) : null,
-      session.stage !== 'booked' && (assumptions.length || session.requirements.unsupported?.length) ? node('details', { class: 'assumptions' }, node('summary', {}, 'Что мы приняли за основу', node('span', { 'aria-hidden': 'true' }, ' +')), node('ul', {}, assumptions.map(value => node('li', {}, value)), (session.requirements.unsupported || []).map(value => node('li', {}, 'Пока не можем учесть: ' + value)))) : null);
+      context);
   }
 
   function clarificationQuestions() {
@@ -364,11 +467,9 @@
   }
 
   function stayImage(plan) {
-    const hotel = plan.hotel || {};
-    const features = hotel.features || [];
-    const number = Number(String(hotel.id || '').replace(/\D/g, '')) || 0;
-    const name = hotel.stars <= 3 ? 'demo-room' : features.includes('pool') && number % 3 === 2 ? 'demo-coastal' : 'demo-garden';
-    return `/static/media/stays/${name}.webp`;
+    const hotels = (state.session?.plans || []).map(item => item.hotel);
+    if (!hotels.some(hotel => hotel.id === plan.hotel.id)) hotels.push(plan.hotel);
+    return assignStayImages(hotels)[plan.hotel.id];
   }
 
   function mealLabel(plan) { return plan.meal === 'Завтрак включён' ? 'Завтрак включён' : 'Без питания'; }
@@ -449,7 +550,7 @@
       node('p', { class: 'muted small' }, `${nights(plan.dates.nights)} · ${plan.guests.adults} взр.${plan.guests.children_ages.length ? ` + ${plan.guests.children_ages.length} дет.` : ''} · рубли`));
   }
 
-  function tripDetails(plan) {
+  function tripDetails(plan, showTitle = true) {
     const transport = plan.transport;
     const days = new Map();
     (plan.timeline || []).forEach(item => {
@@ -462,7 +563,7 @@
     const warnings = (plan.warnings || []).filter(value => value !== plan.data_label && !/демонстрационн[а-я]* (отел|цены|данные)|все объекты/i.test(value));
     return node('div', { class: 'trip-detail-content' },
       node('figure', { class: 'plan-hero' }, node('img', { src: stayImage(plan), alt: '', width: 1200, height: 800 }), node('figcaption', { class: 'image-note' }, 'Иллюстрация демоотеля')),
-      node('section', { class: 'detail-summary' }, node('h2', {}, plan.hotel.name),
+      node('section', { class: 'detail-summary' }, showTitle ? node('h2', {}, plan.hotel.name) : null,
         node('p', { class: 'detail-location' }, `${plan.hotel.area} · ${plan.hotel.stars}★ · оценка ${String(plan.hotel.rating).replace('.', ',')} · ${plan.hotel.beach_m} м до моря`),
         node('p', { class: 'hotel-description' }, plan.hotel.description.replace(/^Вымышленный отель в районе [^.]+\.\s*/, '')),
         node('dl', { class: 'detail-facts' },
@@ -472,7 +573,7 @@
           node('div', {}, node('dt', {}, 'Питание'), node('dd', {}, mealLabel(plan))),
           node('div', {}, node('dt', {}, 'Дорога'), node('dd', {}, transport.title)),
           node('div', {}, node('dt', {}, 'Трансфер'), node('dd', {}, plan.transfer.title))),
-        node('div', { class: 'rate-policy' }, node('strong', {}, 'Отмена'), node('p', { class: 'cancellation-policy' }, plan.policy)),
+        node('div', { class: 'rate-policy' }, node('strong', {}, 'Отмена'), node('p', { class: 'cancellation-policy' }, readablePolicy(plan.policy))),
         secondaryReasons.length ? node('details', { class: 'detail-reasons route-details' }, node('summary', {}, 'Почему подходит вашим пожеланиям'), node('ul', {}, secondaryReasons.map(reason => node('li', {}, reason)))) : null,
         compromises.length ? node('div', { class: 'detail-compromises' }, node('h3', {}, 'Главное учесть'), node('ul', {}, compromises.map(value => node('li', {}, value)))) : null),
       node('section', { class: 'timeline-section' }, node('h3', {}, 'Маршрут поездки'),
@@ -509,7 +610,7 @@
     if (!plan) return results();
     return node('div', { class: 'selected-content' }, button('← К вариантам поездки', () => { state.showResults = true; render(); document.querySelector('.section-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 'back-button'),
       node('div', { class: 'mobile-checkout-link' }, node('p', {}, money(plan.price.total), node('span', {}, plan.transport.mode === 'self' ? 'За всех · без самостоятельной дороги' : 'За всю поездку · за всех')), node('a', { href: '#checkout', class: 'button' }, 'К оформлению ↓')),
-      node('div', { class: 'selected-layout' }, tripDetails(plan), checkoutForm(plan)), composer(true), node('p', { class: 'parser-note' }, parserNote()), history());
+      node('div', { class: 'selected-layout' }, tripDetails(plan, false), checkoutForm(plan)), composer(true), node('p', { class: 'parser-note' }, parserNote()), history());
   }
 
   function downloadOrder() {
