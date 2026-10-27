@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.superpowers
+tmp
+artifacts
+data
+tests
+docs
+*.mp4
+*.webm

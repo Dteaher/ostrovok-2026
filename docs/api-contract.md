@@ -15,7 +15,7 @@ id (stable hash), hotel: {id,name,area,stars,rating,beach_m,description,image (l
 
 `POST /api/sessions` body `{message:string}` creates and processes. `POST /api/sessions/{id}/messages` body `{message:string,revision:int}` updates. `GET /api/sessions/{id}` restores. Session IDs are unguessable capabilities saved to localStorage.
 
-Response Session: {id,revision:int,stage:"clarify"|"results"|"selected"|"booked",requirements:TripRequirements,messages:list[{role:"user"|"assistant",content:string}],assistant_message:string,clarifications:list[{field,question,options:list[{label,value}]}],plans:list[Plan],total_matches:int,counterfactuals:list[...],suggestions:list[...],selected_plan:Plan|null,order:dict|null,changes:list[{field,label,before,after}],parser_mode:string,data_label:string,assumptions:list[str]}.
+Response Session: {id,revision:int,stage:"clarify"|"results"|"selected"|"booked",requirements:TripRequirements,messages:list[{role:"user"|"assistant",content:string}],assistant_message:string,clarifications:list[{field,question,options:list[{label,value}]}],plans:list[Plan],plan_labels:dict[plan_id,str],total_matches:int,counterfactuals:list[...],suggestions:list[...],selected_plan:Plan|null,order:dict|null,changes:list[{field,label,before,after}],parser_mode:string,data_label:string,assumptions:list[str]}.
 
 `POST /api/sessions/{id}/select` body `{plan_id:string,revision:int}` → Session.
 `POST /api/sessions/{id}/checkout` body `{revision:int,accept_demo:true,traveler_name:string,email:string}` → Session. Name 2..100 chars and plausible email required. Order: {id,reference,status:"demo_confirmed",created_at,total,currency,traveler_name,email,plan:Plan,notice:string}. Checkout revalidates and is idempotent. No real card input.

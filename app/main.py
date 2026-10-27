@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -52,7 +52,9 @@ def create_app(db_url: str | None = None) -> FastAPI:
         yield
         database.close()
 
-    application = FastAPI(title="О!План", version="1.0.0", lifespan=lifespan)
+    application = FastAPI(
+        title="О!План", version="1.0.0", lifespan=lifespan, docs_url=None, redoc_url=None
+    )
     application.state.db = database
 
     @application.middleware("http")
@@ -153,6 +155,12 @@ def create_app(db_url: str | None = None) -> FastAPI:
                 "В Сочи с 20 ноября 2026 на 7 ночей, 2 взрослых и ребёнок 6 лет, с бассейном, до 180 тысяч",
             ],
         }
+
+    @application.get("/docs", include_in_schema=False)
+    def api_schema():
+        # The machine-readable contract works offline and under the same CSP as
+        # the main UI; no externally hosted Swagger scripts are required.
+        return RedirectResponse("/openapi.json")
 
     @application.post("/api/sessions")
     async def create_session(payload: MessageRequest):

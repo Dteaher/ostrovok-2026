@@ -1,0 +1,49 @@
+services:
+  db:
+    platform: linux/amd64
+    image: postgres:16.10-bookworm
+    environment:
+      POSTGRES_DB: oplan
+      POSTGRES_USER: oplan
+      POSTGRES_PASSWORD: oplan_demo_local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oplan -d oplan"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+    restart: unless-stopped
+
+  app:
+    platform: linux/amd64
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.example
+    environment:
+      # Environment or an optional copied .env overrides defaults safely.
+      DB_URL: ${DB_URL:-postgresql+psycopg://oplan:oplan_demo_local@db:5432/oplan}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-12}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
