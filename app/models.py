@@ -103,12 +103,14 @@ class PatchRequest(RevisionRequest):
 
 class CheckoutRequest(RevisionRequest):
     accept_demo: Literal[True]
-    traveler_name: str = Field(min_length=2, max_length=100)
-    email: str = Field(min_length=5, max_length=254)
+    traveler_name: str | None = Field(default=None, max_length=100)
+    email: str | None = Field(default=None, max_length=254)
 
     @field_validator("traveler_name", "email")
     @classmethod
-    def strip_fields(cls, value: str) -> str:
+    def strip_fields(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
         value = value.strip()
         if len(value) < 2:
             raise ValueError("Поле не должно быть пустым")
@@ -116,9 +118,11 @@ class CheckoutRequest(RevisionRequest):
 
     @field_validator("email")
     @classmethod
-    def email_shape(cls, value: str) -> str:
+    def email_shape(cls, value: str | None) -> str | None:
         import re
 
+        if value is None:
+            return None
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
             raise ValueError("Укажите корректный email")
         return value

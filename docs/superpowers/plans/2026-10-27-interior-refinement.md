@@ -17,14 +17,23 @@
 - No deployment, new service dependencies or changes to the landing styling/copy.
 
 ## Tasks
-- [ ] Add failing behavior tests for normalized partial edits, invalid/empty numeric inputs, children ages, unique compatible images and readable policies.
-- [ ] Implement UI helpers and a responsive accessible trip editor using the existing requirements PATCH endpoint.
-- [ ] Compress selected-plan introduction, consolidate routine explanations, prioritize stay name/image/price; refine internal typography and route layout.
-- [ ] Add a fourth clearly labelled demo illustration and ensure stable imagery across cards/details/saved trips.
-- [ ] Run Node and Python checks; exercise editor cancellation, submit, validation, failed save, selected-plan recheck and checkout in the browser.
-- [ ] Compare desktop/mobile landing baselines, inspect layouts at 1265/768/390/320px, review diff and obtain independent final review.
+- [x] Add failing behavior tests for normalized partial edits, invalid/empty numeric inputs, children ages, unique compatible images and readable policies.
+- [x] Implement UI helpers and a responsive accessible trip editor using the existing requirements PATCH endpoint.
+- [x] Compress selected-plan introduction, consolidate routine explanations, prioritize stay name/image/price; refine internal typography and route layout.
+- [x] Add a fourth clearly labelled demo illustration and ensure stable imagery across cards/details/saved trips.
+- [x] Run Node and Python checks; exercise editor cancellation, submit, validation, failed save, selected-plan recheck and checkout in the browser.
+- [x] Compare desktop/mobile landing baselines, inspect layouts at 1265/768/390/320px, review diff and obtain independent final review.
 
 Implementation note: Windows serves `.mjs` as `text/plain` in this environment. Use `.js` with module syntax and cover its actual response MIME type in an API regression test.
+
+## Evidence
+- Nine Node behavior tests passed, each introduced RED before its implementation; 247 pytest tests passed. Ruff and JavaScript syntax checks passed. Existing Starlette/httpx deprecation warning remains.
+- CUA: cancel preserves conditions; missing child age blocks submission; age zero and changed nights apply; refundable/quiet priorities remain; selected hotel is retained and requires new-price confirmation.
+- CUA: two-tab revision conflict shows an inline error, preserves the edited budget, and retry applies only that budget while preserving the other tab's new duration.
+- CUA: selected illustration survives reload; complete checkout with synthetic data creates a demo confirmation.
+- CUA: plan/editor checked at 1265/768/390/320px, no horizontal overflow or out-of-dialog fields. Mobile Escape returns focus to edit button. Saved PNGs in ignored `artifacts/refinement/`.
+- Landing at 1265×712 and 390×844: all element geometry/styles equal baseline; Pillow pixel comparison has no differing pixels.
+- Independent read-only review found one P2: illustration reassignment on reopening a retained hotel. Fixed by persisting sanitized per-session mappings; regression test RED→GREEN. No remaining actionable findings from that review.
 
 ## Review focus
 - A blank budget removes only the budget, never silently imposes zero.

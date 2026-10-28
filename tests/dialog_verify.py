@@ -32,6 +32,8 @@ def run():
                 expect(target.locator("#main")).to_have_attribute("aria-busy", "false")
 
             def say(message, target=page):
+                if target.locator('.refine-disclosure').count() and target.locator('.refine-disclosure').get_attribute('open') is None:
+                    target.locator('.refine-disclosure > summary').click()
                 target.locator(".composer textarea").fill(message)
                 act(lambda: target.locator(".composer-submit").click())
 
@@ -40,13 +42,13 @@ def run():
                 return target_context.request.get(f"{base}/api/sessions/{session_id}").json()
 
             say(f"В Сочи с {day} на 7 ночей вдвоём до 500 тысяч, желательно с завтраком")
-            expect(page.locator(".conditions")).to_contain_text("Завтраки · желательно")
+            expect(page.locator(".conditions")).to_contain_text("Завтрак — желательно")
             say("Теперь завтрак обязателен")
-            expect(page.locator(".conditions")).to_contain_text("Завтраки · обязательно")
+            expect(page.locator(".conditions")).to_contain_text("Завтрак — обязательно")
             assert all(p["meal"] == "Завтрак включён" for p in state()["plans"])
             act(lambda target=page: target.locator(".hotel-card .button").first.click())
             original = state()
-            expect(page.locator(".hotel-intent-note")).to_contain_text(original["hotel_intent"]["name"])
+            expect(page.locator('h1')).to_have_text(original['hotel_intent']['name'])
             say("Что изменится, если убрать завтрак?")
             compared = state()
             assert compared["selected_plan"] == original["selected_plan"]
@@ -61,13 +63,14 @@ def run():
             page.screenshot(path=str(output / f"repriced-{width}.png"), full_page=True)
             act(lambda target=page: target.locator(".hotel-card .button").first.click())
             say("Добавь ребёнка")
-            expect(page.locator(".checkout-submit")).to_be_disabled()
+            expect(page.locator(".decision-continue")).to_be_disabled()
             expect(page.locator(".clarification-questions")).to_contain_text("Сколько лет")
             page.screenshot(path=str(output / f"pending-age-{width}.png"), full_page=True)
             say("6 лет")
             assert state()["requirements"]["children_ages"] == [6]
             act(lambda target=page: target.locator(".hotel-card .button").first.click())
-            expect(page.locator(".checkout-submit")).to_be_enabled()
+            expect(page.locator(".decision-continue")).to_be_enabled()
+            page.get_by_role('button', name='К вариантам поездки', exact=True).click()
             act(lambda target=page: target.get_by_role("button", name="Рассмотреть другие отели", exact=True).click())
             assert state()["hotel_intent"] is None
             assert state()["requirements"]["children_ages"] == [6]

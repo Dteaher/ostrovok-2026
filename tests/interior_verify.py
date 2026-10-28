@@ -1,7 +1,7 @@
-"""Interior acceptance and immutable landing screenshots against a local service.
+"""Interior acceptance and landing screenshots against a local service.
 
-Capture once with --baseline before editing. Normal runs compare exact RGBA pixels
-and DOM text/styles, then exercise the internal screens at three viewport widths.
+Capture with --baseline before a landing-preserving change, then explicitly use
+--compare-landing to check exact pixels and DOM. Normal runs allow landing updates.
 """
 
 import argparse
@@ -77,7 +77,7 @@ def landing_snapshot(page):
     })""")
 
 
-def verify_landing(browser, baseline):
+def verify_landing(browser, baseline, compare=False):
     manifest = {}
     for width in WIDTHS:
         context = browser.new_context(viewport={"width": width, "height": 1000}, reduced_motion="reduce")
@@ -85,12 +85,15 @@ def verify_landing(browser, baseline):
         page.goto(BASE, wait_until="networkidle")
         settled(page)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        expect(page.locator('#hero-title')).to_contain_text('Сочи')
+        expect(page.locator('.hero-plan-services')).to_contain_text('Перелёт или поезд')
+        expect(page.locator('.lux-hero-image')).to_have_attribute('src', '/static/media/rivane/hero-sochi.webp')
         stem = f"home-{'before' if baseline else 'after'}-{width}"
         png = page.screenshot(path=str(OUTPUT / f"{stem}.png"), full_page=True, animations="disabled")
         snapshot = landing_snapshot(page)
         (OUTPUT / f"{stem}.json").write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         manifest[str(width)] = {"sha256": hashlib.sha256(png).hexdigest(), "bytes": len(png)}
-        if not baseline:
+        if compare:
             before = OUTPUT / f"home-before-{width}.png"
             assert before.exists(), "Capture the clean landing first with --baseline"
             difference = pixel_difference(browser, before.read_bytes(), png)
@@ -116,8 +119,12 @@ def verify_interior_width(browser, width, day):
         expect(page.locator("#main")).to_have_attribute("aria-busy", "false")
 
     def say(message):
+        if page.locator("#travel-chat").count() and not page.locator("#travel-chat").is_visible():
+            page.locator(".chat-toggle").click()
         page.locator(".composer textarea").fill(message)
         act(lambda: page.locator(".composer-submit").click())
+        if page.locator(".chat-close").is_visible():
+            page.locator(".chat-close").click()
 
     def state():
         session_id = page.evaluate("localStorage.getItem('oplan-session-v1')")
@@ -160,9 +167,9 @@ def verify_interior_width(browser, width, day):
     # Select with keyboard and review the complete trip before submitting.
     page.locator(".hotel-card .button").first.focus()
     act(lambda: page.keyboard.press("Enter"))
-    expect(page.locator(".checkout-panel")).to_be_visible()
-    expect(page.locator(".trip-detail-content")).to_be_visible()
-    capture("details-checkout")
+    expect(page.locator(".trip-showcase")).to_be_visible()
+    expect(page.locator(".checkout-form")).to_have_count(0)
+    capture("trip-overview")
     selected = state()["selected_plan"]
     days = {item["time"][:10] for item in selected["timeline"]}
     expect(page.locator(".timeline-section .route-group")).to_have_count(len(days))
@@ -174,8 +181,13 @@ def verify_interior_width(browser, width, day):
         expect(page.locator(".timeline-section > .route-details")).to_contain_text(item["detail"])
     page.keyboard.press("Enter")
     expect(page.locator(".timeline-section > .route-details")).not_to_have_attribute("open", "")
+    page.locator('.decision-continue').click()
+    page.locator('.optional-contacts > summary').click()
+    expect(page.locator('.checkout-form')).to_be_visible()
+    expect(page.locator('.route-preview')).to_have_count(0)
+    capture('details-checkout')
     page.locator(".checkout-submit").click()
-    expect(page.locator("#traveler-name")).to_be_focused()
+    expect(page.locator("#demo-agreement")).to_be_focused()
     page.locator("#traveler-name").fill("Тестовый Путешественник")
     page.locator("#traveler-email").fill("demo@example.test")
     page.locator("#demo-agreement").check()
@@ -189,9 +201,15 @@ def verify_interior_width(browser, width, day):
     page.reload(wait_until="networkidle")
     expect(page.locator(".order-reference")).to_have_text(reference)
     with page.expect_download() as download:
-        page.get_by_role("button", name="Скачать заявку", exact=False).click()
-    order = json.loads(Path(download.value.path()).read_text(encoding="utf-8"))
-    assert order["status"] == "demo_confirmed"
+        page.get_by_role("button", name="Скачать план", exact=False).click()
+    document = Path(download.value.path()).read_text(encoding="utf-8")
+    saved = state()["order"]
+    assert download.value.suggested_filename.endswith(".html")
+    assert "<!doctype html>" in document.lower()
+    assert saved["reference"] in document
+    assert saved["plan"]["hotel"]["name"] in document
+    assert str(saved["total"]) in document.replace("\u00a0", "").replace("\u202f", "").replace(" ", "")
+    assert "бронирован" in document.lower() and "демонстрацион" in document.lower()
 
     # Saved trip dialog, native Escape and restore of a completed order.
     page.locator("#home-link").click()
@@ -211,6 +229,12 @@ def verify_interior_width(browser, width, day):
     say("Хочу в Сочи")
     expect(page.locator(".clarify-section")).to_be_visible()
     capture("clarification")
+    page.locator('#clarify-check-in').fill(day)
+    act(lambda: page.locator('.clarify-date-submit').click())
+    expect(page.locator('.hotel-card')).to_have_count(3)
+    assert state()['requirements']['check_in'] == day
+    page.locator('#new-trip').click()
+    say('Хочу в Сочи')
     act(lambda: page.locator(".choice-chip").first.click())
     expect(page.locator(".hotel-card")).to_have_count(3)
     page.locator("#new-trip").click()
@@ -234,6 +258,8 @@ def verify_interior_width(browser, width, day):
     # A failed refinement remains in the internal screen and preserves draft.
     failed_edit = "Нужен бассейн"
     page.route("**/api/sessions/*/messages", lambda route: route.abort())
+    if not page.locator("#travel-chat").is_visible():
+        page.locator(".chat-toggle").click()
     page.locator("#refine-message").fill(failed_edit)
     page.locator(".composer-submit").click()
     expect(page.locator(".alert-error")).to_contain_text("Не удалось связаться")
@@ -244,6 +270,7 @@ def verify_interior_width(browser, width, day):
     act(lambda: page.locator(".composer-submit").click())
     expect(page.locator(".alert-error")).to_have_count(0)
     assert state()["requirements"]["pool"] is True
+    page.locator(".chat-close").click()
 
     # Stress long genuine text slots without changing persisted API data.
     session_id = page.evaluate("localStorage.getItem('oplan-session-v1')")
@@ -271,6 +298,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--landing-only", action="store_true")
+    parser.add_argument("--compare-landing", action="store_true")
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     chrome = os.getenv("OPLAN_CHROME_PATH") or shutil.which("google-chrome") or shutil.which("chromium")
@@ -281,11 +309,13 @@ def run():
         browser = playwright.chromium.launch(headless=True,
             args=["--disable-gpu", "--disable-lcd-text", "--font-render-hinting=none"],
             **({"executable_path": chrome} if chrome else {}))
-        verify_landing(browser, args.baseline)
+        verify_landing(browser, args.baseline, args.compare_landing)
         if not args.baseline and not args.landing_only:
             verify_interiors(browser)
         browser.close()
-    result = "clean landing baseline captured" if args.baseline else "landing has zero differing pixels; text, geometry and computed styles exactly unchanged"
+    result = "landing baseline captured" if args.baseline else "landing copy, scope, hero and screenshots checked"
+    if args.compare_landing:
+        result += "; landing pixels, text, geometry and computed styles unchanged"
     if not args.baseline and not args.landing_only:
         result += "; keyboard/loading/results/update/details/checkout/booked/download/reload/saved restore/clarification/empty/error retry/long titles verified with no overflow or page errors"
     print(f"PASS: {result}; landing 1440/768/390px, interiors also 320px")

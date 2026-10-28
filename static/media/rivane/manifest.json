@@ -1,6 +1,6 @@
 {
-  "verified_on": "2026-10-27",
-  "hero": "hero.webp",
+  "verified_on": "2026-10-28",
+  "hero": "hero-sochi.webp",
   "destination_mapping": {
     "Сочи Центр": "sochi.webp",
     "Адлер": "adler.webp",
@@ -12,8 +12,22 @@
   "disclosure_ru": "Фотографии передают атмосферу отдыха. Изображения районов могут быть иллюстративными.",
   "assets": [
     {
+      "file": "hero-sochi.webp",
+      "author": "Alexey Elfimov",
+      "source": "https://unsplash.com/photos/a-bunch-of-boats-that-are-in-the-water-FnBRPxmYUuE",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "depicts": "Sochi marine terminal, per photographer caption",
+      "usage": "Actual Sochi regional photograph; no hotel identity implied.",
+      "width": 2400,
+      "height": 1600,
+      "bytes": 510678,
+      "changes": "Resized, cropped, converted to WebP. No compositing or generated imagery.",
+      "role": "hero"
+    },
+    {
       "file": "hero.webp",
-      "role": "hero",
+      "role": "unused-previous-hero",
       "author": "Ahmet ÇÖTÜR",
       "source": "https://www.pexels.com/photo/infinity-pool-and-patio-of-a-mountain-resort-20975726/",
       "license": "Pexels License",

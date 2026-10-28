@@ -5,6 +5,8 @@ contract is the same, including atomic revision updates and unique orders.
 """
 
 import logging
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import (
@@ -75,21 +77,61 @@ class Database:
             logger.warning("Database readiness check failed")
             return False
 
-    def create(self, state: dict) -> None:
-        with self.engine.begin() as connection:
+    @contextmanager
+    def transaction(self, deadline=None):
+        """Bound lock/statement waits and roll back work completed too late."""
+        def check():
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Storage deadline reached")
+        def set_wait_limit(connection):
+            milliseconds = max(1, int((deadline - time.monotonic()) * 1000)) if deadline else 15000
+            if connection.dialect.name == "sqlite":
+                # SQLite's busy-handler sleeps can overshoot wall time on
+                # Windows. Bounded HTTP writes fail immediately on contention;
+                # they must never commit a detached update after the deadline.
+                connection.exec_driver_sql(f"PRAGMA busy_timeout={0 if deadline else milliseconds}")
+            elif deadline is not None and connection.dialect.name == "postgresql":
+                connection.execute(text("SELECT set_config('statement_timeout', :value, true)"),
+                                   {"value": str(milliseconds)})
+        check()
+        try:
+            with self.engine.connect() as connection, connection.begin() as transaction:
+                check()
+                set_wait_limit(connection)
+                yield connection
+                check()
+                # COMMIT can itself wait for SQLite readers. Recompute its
+                # timeout after UPDATE/JSON work instead of reusing old slack.
+                set_wait_limit(connection)
+                try:
+                    transaction.commit()
+                except SQLAlchemyError:
+                    # A failed DBAPI COMMIT can leave a native transaction open
+                    # after SQLAlchemy marks its transaction inactive. Discard
+                    # the connection so a later read cannot commit that write.
+                    connection.invalidate()
+                    raise
+        except SQLAlchemyError as exc:
+            locked = self.engine.dialect.name == "sqlite" and "locked" in str(exc.orig if hasattr(exc, "orig") else exc).lower()
+            if deadline is not None and (locked or time.monotonic() >= deadline - .01):
+                raise TimeoutError("Storage deadline reached") from exc
+            raise
+
+    def create(self, state: dict, *, deadline=None) -> None:
+        with self.transaction(deadline) as connection:
             connection.execute(
                 insert(sessions).values(id=state["id"], revision=state["revision"], payload=state)
             )
 
-    def load(self, session_id: str) -> dict | None:
-        with self.engine.connect() as connection:
+    def load(self, session_id: str, *, deadline=None) -> dict | None:
+        with self.transaction(deadline) as connection:
             row = connection.execute(
                 select(sessions.c.payload).where(sessions.c.id == session_id)
             ).first()
             return row[0] if row else None
 
-    def save(self, state: dict, expected: int, order: dict | None = None) -> None:
-        with self.engine.begin() as connection:
+    def save(self, state: dict, expected: int, order: dict | None = None, *, deadline=None) -> None:
+        with self.transaction(deadline) as connection:
             changed = connection.execute(
                 update(sessions)
                 .where(sessions.c.id == state["id"], sessions.c.revision == expected)

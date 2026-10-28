@@ -1,0 +1,29 @@
+/* Interior-only concierge rationale; the approved landing stays unchanged. */
+.has-session .concierge-notes { margin: 22px 0; border-block: 1px solid #d8d4ca; padding: 6px 0 16px; color: #183040; }
+.has-session .concierge-notes summary { display: flex; align-items: center; gap: 12px; padding: 16px 0; cursor: pointer; list-style: none; font-size: 16px; font-weight: 600; }
+.has-session .concierge-notes summary::-webkit-details-marker { display: none; }
+.has-session .concierge-notes summary>span:last-child { margin-left: auto; font-size: 24px; font-weight: 400; }
+.has-session .concierge-notes summary small { display: block; margin-top: 5px; color: #697477; font-size: 13px; font-weight: 400; }
+.has-session .concierge-notes details[open] summary>span:last-child { transform: rotate(45deg); }
+.has-session .concierge-facts { margin: 4px 0 16px; padding-left: 22px; display: grid; gap: 10px; max-width: 960px; font-size: 14px; line-height: 1.6; }
+.has-session .concierge-facts li { padding-left: 3px; overflow-wrap: anywhere; }
+.has-session .concierge-provenance, .has-session .concierge-notice { font-size: 13px; line-height: 1.5; color: #687575; margin: 12px 0; }
+.has-session .concierge-question { font-family: Georgia, serif; font-size: 23px; margin: 14px 0; }
+.has-session .concierge-actions { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 6px; }
+.has-session .concierge-actions .choice-chip { min-height: 44px; white-space: normal; text-align: left; }
+.has-session .concierge-notes summary:focus-visible { outline: 2px solid #947146; outline-offset: 4px; }
+.has-session .concierge-working { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 12px; align-items: center; max-width: calc(100vw - 32px); padding: 16px 22px; background: #163443; color: #faf7ef; border: 1px solid #c5ac7e; border-radius: 4px; box-shadow: 0 8px 24px #122b3b20; font-size: 14px; }
+.has-session .session-intro .concierge-notes { background: #faf7ef; border: 0; padding: 5px 22px 20px; margin: 22px 0 4px; border-radius: 4px; }
+.has-session .session-intro .concierge-notes summary,
+.has-session .session-intro .concierge-notes summary>span,
+.has-session .session-intro .concierge-notes li,
+.has-session .session-intro .concierge-notes .concierge-question { color: #183040; }
+.has-session .session-intro .concierge-notes p,
+.has-session .session-intro .concierge-notes summary small { color: #5d6f71; }
+@media (max-width: 600px) {
+  .has-session .concierge-notes summary { align-items: flex-start; font-size: 15px; }
+  .has-session .concierge-notes summary small { max-width: 220px; line-height: 1.5; }
+  .has-session .concierge-facts { font-size: 13px; padding-left: 17px; }
+  .has-session .concierge-question { font-size: 21px; }
+  .has-session .concierge-actions .choice-chip { flex: 1 1 140px; }
+}

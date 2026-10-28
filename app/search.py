@@ -328,11 +328,9 @@ def _plan(hotel, req, rooms, breakfast, refundable):
     preference_matches, preference_compromises = _preferences(hotel, req, breakfast, refundable)
     reasons.extend(text for text in preference_matches if text not in reasons)
     compromises.extend(text for text in preference_compromises if text not in compromises)
-    score = round(
-        hotel["rating"] * 10 - total / 12000 + (hotel["quietness"] * 3 if req.quiet else 0),
-        3,
-    )
-    score += len(preference_matches) * 30
+    # Rating is bounded by 10. One satisfied preference outranks the whole
+    # rating range; money is compared separately, never mixed into this score.
+    score = round(len(preference_matches) * 11 + hotel["rating"], 3)
     return {
         "id": plan_id,
         "hotel": public_hotel,
@@ -450,12 +448,24 @@ def _candidates(req, *, enforce_budget=True, hotel_id=None):
     return plans, dict(rejected)
 
 
-def _distinct(plans):
+def ranking_key(plan, ranking="balanced"):
+    match = -len(plan["preference_matches"])
+    rating = -plan["hotel"]["rating"]
+    price = plan["price"]["total"]
+    beach = plan["hotel"]["beach_m"]
+    orders = {"balanced": (match, rating, price, beach), "price": (price, match, rating, beach),
+              "beach": (beach, price, match, rating), "rating": (rating, match, price, beach)}
+    if ranking not in orders:
+        raise ValueError("Неизвестный приоритет подбора")
+    return (*orders[ranking], plan["id"])
+
+
+def _distinct(plans, ranking="balanced"):
     best = {}
-    for plan in sorted(plans, key=lambda p: (-p["score"], p["price"]["total"], p["id"])):
+    for plan in sorted(plans, key=lambda p: ranking_key(p, ranking)):
         best.setdefault(plan["hotel"]["id"], plan)
     # A soft preference can reorder eligible options, never remove one.
-    return sorted(best.values(), key=lambda p: (-p["score"], p["price"]["total"], p["id"]))
+    return sorted(best.values(), key=lambda p: ranking_key(p, ranking))
 
 
 def _representative_choices(ranked, *, minimum_total=None):
@@ -544,13 +554,41 @@ def _suggestions(req, *, hotel_id=None):
                 changes.append((field, value, label))
 
     def evaluate(patch, labels):
+        patch = dict(patch)
+        descriptions = dict(zip(patch, labels, strict=True))
+        updated = TripRequirements.model_validate({**req.model_dump(), **patch})
+        candidates, _ = _candidates(updated, hotel_id=hotel_id)
+        if not candidates:
+            return None
+        # Keep useful numeric bounds instead of asking to remove them entirely.
+        # The existing order is fewest changed fields, then lowest total price;
+        # these are concrete sufficient bounds, not a global distance optimum.
+        witness = min(candidates, key=lambda plan: (plan["price"]["total"], plan["id"]))
+        for field, attribute, label in (
+            ("min_rating", "rating", "Снизить минимальную оценку до"),
+            ("max_beach_m", "beach_m", "Рассмотреть пляж в пределах"),
+            ("stars", "stars", "Рассмотреть отели от"),
+        ):
+            if field in patch:
+                value = witness["hotel"][attribute]
+                value = max(req.max_beach_m, value) if field == "max_beach_m" else min(getattr(req, field), value)
+                if value == getattr(req, field):
+                    patch.pop(field)
+                    descriptions.pop(field)
+                    continue
+                patch[field] = value
+                suffix = " м" if field == "max_beach_m" else " звёзд" if field == "stars" else ""
+                display = f"{value:g}".replace(".", ",")
+                descriptions[field] = f"{label} {display}{suffix}"
+        if not patch:
+            return None
         updated = TripRequirements.model_validate({**req.model_dump(), **patch})
         candidates, _ = _candidates(updated, hotel_id=hotel_id)
         if not candidates:
             return None
         item = {
             "patch": patch,
-            "label": "; ".join(labels) + " — только с вашего согласия",
+            "label": "; ".join(descriptions.values()) + " — только с вашего согласия",
             "total_matches": len(_distinct(candidates)),
             "min_total": min(p["price"]["total"] for p in candidates),
         }
@@ -588,12 +626,22 @@ def _suggestions(req, *, hotel_id=None):
                 amount, budget_label = budget
                 if item := evaluate({field: value, "budget": amount}, [label, budget_label]):
                     suggestions.append(item)
+    unique = {json.dumps(item["patch"], sort_keys=True): item for item in suggestions}
     return sorted(
-        suggestions, key=lambda item: (len(item["patch"]), item["min_total"], sorted(item["patch"]))
+        unique.values(), key=lambda item: (len(item["patch"]), item["min_total"], sorted(item["patch"]))
     )[:4]
 
 
 def _diagnostic(req, rejected, *, hotel_id=None):
+    labels = {
+        "max_beach_m": f"пляж до {req.max_beach_m} м",
+        "min_rating": f"оценка от {req.min_rating:g}",
+        "stars": f"от {req.stars} звёзд",
+        "pool": "бассейн", "quiet": "тихая территория",
+        "pets": "размещение с питомцем", "accessible": "доступная среда",
+        "refundable": "бесплатная отмена",
+    }
+    conflict = "; ".join(labels[field] for field in rejected if field in labels)
     errors = _input_errors(req)
     if errors:
         kind = "unsupported_destination" if "destination" in errors else "unsupported_input"
@@ -609,7 +657,8 @@ def _diagnostic(req, rejected, *, hotel_id=None):
             "kind": "pinned_hotel_conflict",
             "hotel_id": hotel_id,
             "fields": list(rejected),
-            "message": "Выбранный отель не соответствует условиям демо-каталога. Отель сохранён.",
+            "message": "Выбранный отель не соответствует условиям демо-каталога"
+            + (": " + conflict if conflict else "") + ". Отель сохранён.",
         }
     if "budget" in rejected:
         return {
@@ -630,7 +679,8 @@ def _diagnostic(req, rejected, *, hotel_id=None):
     return {
         "kind": "constraints",
         "fields": list(rejected),
-        "message": "В демо-каталоге нет вариантов со всеми обязательными условиями.",
+        "message": "В демо-каталоге нет варианта, который одновременно выполняет: " + conflict + "."
+        if conflict else "В демо-каталоге нет вариантов со всеми обязательными условиями.",
     }
 
 
@@ -665,12 +715,16 @@ def _counterfactuals(req, strict, *, hotel_id=None):
     return sorted(items, key=lambda item: (-item["saving"], item["field"]))[:3]
 
 
-def search(requirements: TripRequirements, limit: int = 3, *, hotel_id: str | None = None) -> dict:
+def search(requirements: TripRequirements, limit: int = 3, *, hotel_id: str | None = None, ranking: str = "balanced") -> dict:
     plans, rejected = _candidates(requirements, hotel_id=hotel_id)
-    distinct = _distinct(plans)
+    distinct = _distinct(plans, ranking)
     ordered, labels = _representative_choices(
         distinct, minimum_total=min((p["price"]["total"] for p in plans), default=None)
     )
+    if ranking != "balanced":
+        ordered = distinct
+        label = {"price": "Сначала ниже цена", "beach": "Сначала ближе к морю", "rating": "Сначала выше рейтинг"}[ranking]
+        labels = {p["id"]: label for p in ordered}
     displayed = ordered[: max(0, limit)]
     return {
         "plans": displayed,

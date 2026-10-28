@@ -28,12 +28,17 @@ services:
     environment:
       # Environment or an optional copied .env overrides defaults safely.
       DB_URL: ${DB_URL:-postgresql+psycopg://oplan:oplan_demo_local@db:5432/oplan}
+      TRAVEL_MODE: ${TRAVEL_MODE:-local}
       LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-openai/gpt-5.4-mini}
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://polza.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-5.6-luna}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://multiai.store/v1}
       LLM_TIMEOUT: ${LLM_TIMEOUT:-30}
       LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-1500}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-}
+      LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-none}
+      LLM_STRUCTURED_OUTPUT: ${LLM_STRUCTURED_OUTPUT:-1}
+      LLM_TRUST_ENV: ${LLM_TRUST_ENV:-1}
+      AGENT_ENABLED: ${AGENT_ENABLED:-1}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       db:

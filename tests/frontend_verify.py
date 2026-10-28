@@ -1,6 +1,5 @@
 """Browser acceptance check against the running local demonstration service."""
 
-import json
 import os
 import shutil
 from pathlib import Path
@@ -65,6 +64,7 @@ def run():
             (item for item in before["counterfactuals"] if item["field"] == "breakfast"), None
         )
         assert breakfast_change and breakfast_change["value"] is False
+        page.locator('.alternatives-disclosure > summary').click()
         act(
             page,
             lambda: page.get_by_role("button", name=breakfast_change["label"], exact=False).click(),
@@ -101,21 +101,29 @@ def run():
         act(page, lambda: page.locator(".hotel-card .button").first.click())
         expect(page.locator(".alert-error")).to_contain_text("другой вкладке")
         act(page, lambda: page.locator(".hotel-card .button").first.click())
+        expect(page.locator('.trip-showcase')).to_be_visible()
+        expect(page.locator('.checkout-form')).to_have_count(0)
+        page.locator('.decision-continue').click()
+        page.locator('.optional-contacts > summary').click()
         expect(page.locator(".checkout-panel")).to_be_visible()
         page.screenshot(path=str(output / "ui-checkout.png"), full_page=True)
         page.locator("#traveler-name").fill("Тестовый Путешественник")
         page.locator("#traveler-email").fill("demo@example.test")
         page.locator("#demo-agreement").check()
         act(page, lambda: page.locator(".checkout-submit").click())
-        expect(page.locator(".confirmation-main h2")).to_contain_text("готова")
+        expect(page.locator('.booked-section')).to_be_visible()
+        expect(page.locator('.order-reference')).to_contain_text('DEMO-')
         reference = page.locator(".order-reference").inner_text()
         page.reload()
         expect(page.locator(".order-reference")).to_have_text(reference)
         with page.expect_download() as download_info:
-            page.get_by_role("button", name="Скачать заявку").click()
+            page.get_by_role("button", name="Скачать план").click()
         download_path = download_info.value.path()
-        order = json.loads(Path(download_path).read_text(encoding="utf-8"))
-        assert order["status"] == "demo_confirmed"
+        document = Path(download_path).read_text(encoding="utf-8")
+        assert download_info.value.suggested_filename.endswith(".html")
+        assert "<!doctype html>" in document.lower()
+        assert reference.replace("План № ", "") in document
+        assert "Бронирование и оплата не выполнены" in document
         page.screenshot(path=str(output / "ui-order.png"), full_page=True)
         mobile = browser.new_context(
             viewport={"width": 390, "height": 844},
@@ -135,6 +143,8 @@ def run():
         )
         mobile_page.screenshot(path=str(output / "ui-mobile-results.png"), full_page=True)
         act(mobile_page, lambda: mobile_page.locator(".hotel-card .button").first.click())
+        mobile_page.locator('.decision-continue').click()
+        mobile_page.locator('.optional-contacts > summary').click()
         expect(mobile_page.locator(".checkout-panel")).to_be_visible()
         assert mobile_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), (
             "Checkout horizontal overflow"
@@ -155,20 +165,20 @@ def run():
         )
         act(mobile_page, lambda: mobile_page.locator(".composer-submit").click())
         expect(mobile_page.locator(".hotel-card")).to_have_count(3)
-        for caption in mobile_page.locator(".total-price > span").all():
-            expect(caption).to_contain_text("без самостоятельной дороги")
+        for caption in mobile_page.locator(".price-includes").all():
+            expect(caption).to_contain_text("дорога и трансфер не включены")
             assert "с дорогой" not in caption.inner_text()
         act(mobile_page, lambda: mobile_page.locator(".hotel-card .button").first.click())
-        expect(mobile_page.locator(".mobile-checkout-link p span")).to_have_text(
-            "За всех · без самостоятельной дороги"
-        )
-        expect(mobile_page.locator(".checkout-panel .price-breakdown h3")).to_have_text(
+        expect(mobile_page.locator('.decision-exclusion')).to_contain_text('не включены')
+        mobile_page.locator('.decision-continue').click()
+        mobile_page.locator('.optional-contacts > summary').click()
+        expect(mobile_page.locator(".checkout-recap .price-breakdown h3")).to_have_text(
             "Стоимость включённых услуг"
         )
-        expect(mobile_page.locator(".checkout-panel .price-exclusion-note")).to_have_text(
+        expect(mobile_page.locator(".checkout-recap .price-exclusion-note")).to_have_text(
             "Стоимость самостоятельной дороги и трансфера не рассчитана и не включена в сумму."
         )
-        price_rows = mobile_page.locator(".checkout-panel .price-breakdown dl > div")
+        price_rows = mobile_page.locator(".checkout-recap .price-breakdown dl > div")
         expect(price_rows.nth(1).locator("dd")).to_have_text("Не рассчитано")
         expect(price_rows.nth(2).locator("dd")).to_have_text("Не рассчитано")
         self_session_id = mobile_page.evaluate("localStorage.getItem('oplan-session-v1')")
@@ -184,7 +194,7 @@ def run():
         )
         assert response.ok
         mobile_page.reload()
-        expect(mobile_page.locator(".condition-list")).to_contain_text("Море до 0 м")
+        expect(mobile_page.locator(".conditions")).to_contain_text("Море до 0 м")
         # An impossible budget remains explicit and receives a useful empty state.
         mobile_page.locator("#new-trip").click()
         mobile_page.locator("#trip-message").fill(
@@ -199,9 +209,10 @@ def run():
             'В Сочи с 6 ноября 2026 на 7 ночей <img src=x onerror="alert(1)">'
         )
         act(mobile_page, lambda: mobile_page.locator(".composer-submit").click())
-        mobile_page.locator(".history summary").click()
-        expect(mobile_page.locator(".history")).to_contain_text("<img src=x")
-        assert mobile_page.locator(".history img").count() == 0
+        mobile_page.locator(".chat-toggle").click()
+        expect(mobile_page.locator(".chat-thread")).to_contain_text("<img src=x")
+        assert mobile_page.locator(".chat-thread img").count() == 0
+        mobile_page.locator(".chat-close").click()
         # A failed request gives a visible recovery message and preserves the draft.
         mobile_page.locator("#new-trip").click()
         mobile_page.route("**/api/sessions", lambda route: route.abort())

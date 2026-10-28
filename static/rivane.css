@@ -35,45 +35,48 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .brand-name>span { color: var(--gold); }
 .brand-caption { display: block; color: inherit; padding: 0 0 0 22px; border: 0; max-width: none; font-size: 6.5px; letter-spacing: 3.2px; line-height: 1.2; }
 .site-header .brand>span:first-child { color: inherit; }
-.site-header .main-nav { display: flex; align-items: center; gap: 34px; flex: 1; margin-left: 30px; font-size: 12px; }
+.site-header .main-nav { display: flex; align-items: center; gap: 34px; flex: 1; margin-left: 30px; font-size: 13px; }
 .site-header .main-nav a, .site-header .main-nav button { color: inherit; opacity: .92; text-decoration: none; border: 0; padding: 10px 0; background: none; white-space: nowrap; }
 .site-header .main-nav a:hover, .site-header .main-nav button:hover { color: var(--gold); opacity: 1; }
 .site-header .main-nav #trips-link { margin-left: auto; border: 1px solid #ffffff65; padding: 10px 20px; border-radius: 40px; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
 .header-search { display: grid; place-items: center; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; color: inherit; border: 0; background: transparent; border-radius: 50%; }
 .header-search:hover { background: #ffffff18; }
-.header-new { padding: 9px 18px; color: inherit; background: none; border: 1px solid var(--line); border-radius: 40px; font-size: 12px; white-space: nowrap; }
+.header-new { padding: 9px 18px; color: inherit; background: none; border: 1px solid var(--line); border-radius: 40px; font-size: 13px; white-space: nowrap; }
 .menu-toggle { display: none; }
-.eyebrow { font-size: 10px; line-height: 1.5; font-weight: 600; letter-spacing: 2.4px; }
+.eyebrow { font-size: 13px; line-height: 1.5; font-weight: 600; letter-spacing: 2.4px; }
 .lux-hero { position: relative; isolation: isolate; overflow: hidden; background: #162c3b; color: #fff; }
 .lux-hero-image, .lux-hero-shade { position: absolute; inset: 0; width: 100%; height: 100%; }
-.lux-hero-image { object-fit: cover; object-position: 50% 62%; z-index: -3; }
-.lux-hero-shade { z-index: -2; background: linear-gradient(90deg, #071d2bea 0%, #0b2431bf 31%, #10202c38 69%, #07131c25 100%), linear-gradient(0deg, #061d2d7d, transparent 38%, #091a2724); }
+.lux-hero-image { object-fit: cover; object-position: 50% 58%; z-index: -3; }
+.lux-hero-shade { z-index: -2; background: linear-gradient(90deg, #071d2bea 0%, #0b2431bf 31%, #10202c38 69%, #07131c55 100%), linear-gradient(0deg, #061d2d7d, transparent 38%, #091a2724); }
 .lux-hero-inner { padding-top: 113px; padding-bottom: 27px; display: grid; grid-template-columns: minmax(0, 1fr) 230px; column-gap: 42px; row-gap: 28px; }
 .lux-intro>.eyebrow { color: #ead1ac; margin-bottom: 14px; }
 .lux-intro h1 { font-size: clamp(60px, 5.2vw, 84px); line-height: .94; font-weight: 400; letter-spacing: -.025em; }
 .lux-intro h1 em { color: #efc18c; font-weight: 400; }
 .lux-description { max-width: 660px; margin-top: 20px; font-size: 16px; line-height: 1.55; color: #f3f2f0; text-wrap: pretty; }
 .hero-manifesto { align-self: end; padding-bottom: 10px; padding-left: 22px; border-left: 1px solid #ffffff37; }
-.hero-manifesto>.eyebrow { max-width: 180px; margin-bottom: 20px; font-size: 9px; color: #e9cca3; }
+.hero-manifesto>.eyebrow { max-width: 180px; margin-bottom: 20px; font-size: 13px; color: #e9cca3; }
+.hero-plan-services { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.hero-plan-services li { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-size: 29px; line-height: 1.1; color: #fffdf6; }
+.hero-plan-services svg { color: #eed0a5; flex-shrink: 0; }
 .manifesto-quote { font-family: var(--serif); font-style: italic; font-size: 33px; line-height: 1.03; letter-spacing: -.4px; }
 .manifesto-quote em { color: #ebc799; }
 .manifesto-rule { display: block; width: 32px; margin: 24px 0; border-top: 1px solid #fff; }
 .hero-facts { display: flex; gap: 28px; }
 .hero-facts>div { display: flex; flex-direction: column; }
 .hero-facts strong { font-size: 24px; font-weight: 400; line-height: 1.2; }
-.hero-facts span { color: #efebe5; font-size: 10px; }
+.hero-facts span { color: #fffdf6; font-size: 13px; }
 .lux-search { grid-column: 1; min-width: 0; }
 .hero-composer { margin: 0; padding: 10px; display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #fffffff7; border: 1px solid #ffffffa6; border-radius: 20px; box-shadow: 0 12px 36px #06192514; color: var(--ink); }
 .hero-composer .composer-label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .composer-emblem { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid #dcd9d1; color: #987342; border-radius: 50%; }
-.hero-composer textarea { min-height: 58px; height: 58px; padding: 8px 0; resize: none; width: 100%; border: 0; background: transparent; font-size: 12px; line-height: 1.7; color: #243b49; }
-.hero-composer textarea::placeholder { color: #7b7d80; opacity: 1; }
+.hero-composer textarea { min-height: 58px; height: 58px; padding: 8px 0; resize: none; width: 100%; border: 0; background: transparent; font-size: 13px; line-height: 1.7; color: #243b49; }
+.hero-composer textarea::placeholder { color: #53616b; opacity: 1; }
 .hero-composer textarea:focus { outline: 0; }
 .hero-composer:focus-within { outline: 2px solid var(--gold); outline-offset: 4px; }
 .hero-composer .composer-bottom { padding: 0; border: 0; margin: 0; display: block; }
 .hero-composer .composer-hint { display: none; }
-.hero-composer .composer-submit { min-height: 58px; min-width: 242px; padding: 16px 22px; font-size: 12px; color: #fff; border-radius: 40px; border: 1px solid #092134; background: linear-gradient(110deg, #102a3d, #0c1318); box-shadow: none; }
+.hero-composer .composer-submit { min-height: 58px; min-width: 242px; padding: 16px 22px; font-size: 13px; color: #fff; border-radius: 40px; border: 1px solid #092134; background: linear-gradient(110deg, #102a3d, #0c1318); box-shadow: none; }
 .hero-composer .composer-submit>span { display: flex; align-items: center; justify-content: center; gap: 18px; }
 .hero-composer .composer-submit svg { color: #e7bb80; width: 20px; height: 20px; }
 .hero-composer .composer-submit:hover { background: #25485c; border-color: #45677d; }
@@ -82,13 +85,13 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .theme-chip>span { display: flex; align-items: center; gap: 8px; }
 .theme-chip svg { width: 19px; height: 19px; flex-shrink: 0; }
 .theme-chip:hover { color: #fff; background: #ffffff23; border-color: #efd3ad; transform: translateY(-1px); }
-.hero-demo-note { margin-top: 14px; font-size: 9px; line-height: 1.5; color: #f3eae0dc; }
-.hero-photo-credit { position: absolute; right: 56px; bottom: 22px; max-width: 190px; font-size: 9px; line-height: 1.5; color: #f3e9dcdf; text-align: right; }
+.hero-demo-note { margin-top: 14px; font-size: 13px; line-height: 1.6; color: #fff6e9; max-width: 780px; }
+.hero-photo-credit { position: absolute; right: 56px; bottom: 22px; max-width: 190px; font-size: 13px; line-height: 1.5; color: #f3e9dcdf; text-align: right; }
 .destinations-section { padding: 33px 0 30px; scroll-margin-top: 26px; }
 .destination-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 18px; }
-.destination-heading .eyebrow, .journey-heading .eyebrow { color: #98703e; font-size: 9px; letter-spacing: 2.2px; margin-bottom: 4px; }
+.destination-heading .eyebrow, .journey-heading .eyebrow { color: #98703e; font-size: 13px; letter-spacing: 2.2px; margin-bottom: 4px; }
 .destination-heading h2 { font-size: 35px; line-height: 1.05; font-weight: 500; letter-spacing: -.02em; }
-.outline-button { flex-shrink: 0; display: inline-flex; min-height: 44px; min-width: 44px; align-items: center; gap: 16px; padding: 10px 17px; border: 1px solid #d8d1c6; border-radius: 30px; background: transparent; font-size: 10px; }
+.outline-button { flex-shrink: 0; display: inline-flex; min-height: 44px; min-width: 44px; align-items: center; gap: 16px; padding: 10px 17px; border: 1px solid #d8d1c6; border-radius: 30px; background: transparent; font-size: 13px; }
 .outline-button>span { display: inline-flex; align-items: center; gap: 14px; }
 .outline-button svg { color: #9a7545; width: 18px; height: 18px; }
 .outline-button:hover { border-color: var(--accent); background: #efe8dc; }
@@ -100,10 +103,10 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .destination-card:hover img { transform: scale(1.055); }
 .destination-copy { position: absolute; z-index: 1; left: 15px; bottom: 16px; right: 29px; display: flex; flex-direction: column; gap: 3px; }
 .destination-name { font-size: 18px; font-weight: 500; line-height: 1.2; }
-.destination-description { color: #f5f2ec; font-size: 10px; line-height: 1.5; }
+.destination-description { color: #f5f2ec; font-size: 13px; line-height: 1.5; }
 .destination-arrow { position: absolute; z-index: 2; right: 10px; bottom: 14px; width: 27px; height: 27px; border: 1px solid #ffffffbd; border-radius: 50%; display: grid; place-items: center; }
 .destination-arrow svg { width: 16px; height: 16px; }
-.destination-note { font-size: 10px; line-height: 1.6; color: #7b776e; margin-top: 14px; }
+.destination-note { font-size: 13px; line-height: 1.6; color: #7b776e; margin-top: 14px; }
 .journey-section { padding: 36px 0 42px; border-top: 1px solid var(--line); }
 .journey-heading { margin-bottom: 26px; }
 .journey-heading h2 { font-size: 43px; line-height: 1.1; }
@@ -112,11 +115,11 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .journey-steps li { border-top: 1px solid #d6c8b5; padding-top: 16px; }
 .step-number { font-family: var(--serif); color: #ae8d64; font-size: 29px; line-height: 1; }
 .journey-steps h3 { font-family: var(--sans); font-size: 13px; font-weight: 600; margin: 12px 0 7px; }
-.journey-steps p { font-size: 11px; line-height: 1.7; max-width: 250px; color: var(--muted); }
-.journey-parser-note { font-size: 10px; color: var(--muted); margin-top: 26px; }
-.site-footer { padding-top: 22px; padding-bottom: 25px; font-size: 10px; }
+.journey-steps p { font-size: 13px; line-height: 1.7; max-width: 250px; color: var(--muted); }
+.journey-parser-note { font-size: 13px; color: var(--muted); margin-top: 26px; }
+.site-footer { padding-top: 22px; padding-bottom: 25px; font-size: 13px; }
 .footer-brand { font-family: var(--serif); font-size: 23px; letter-spacing: 1.7px; }
-.footer-brand>span { margin-left: 14px; font-family: var(--sans); font-size: 10px; letter-spacing: 0; color: var(--muted); }
+.footer-brand>span { margin-left: 14px; font-family: var(--sans); font-size: 13px; letter-spacing: 0; color: var(--muted); }
 
 /* The same editorial system continues into the working travel agent. */
 .has-session .site-header { position: relative; color: var(--ink); background: var(--white); border-color: var(--line); }
@@ -126,14 +129,14 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .has-session .header-search:hover { background: var(--sand); }
 .has-session #main.wrap { max-width: 1280px; padding-top: 32px; }
 .results-title { font-size: 60px; color: #172e3e; font-weight: 400; letter-spacing: -.03em; }
-.session-title-row .eyebrow { color: #987342; font-size: 9px; }
+.session-title-row .eyebrow { color: #987342; font-size: 13px; }
 .demo-tag { border-color: #d6ccbc; background: #f0ece3; color: #6c5c44; border-radius: 30px; }
 .status-dot { background: #958264; }
 .conditions { border-color: var(--line); padding: 18px 0; }
-.condition-list { font-size: 12px; }
+.condition-list { font-size: 13px; }
 .assistant-mark { background: #15344b; color: #e6c69e; font-family: var(--serif); font-size: 14px; }
 .assistant-message p { font-size: 13px; color: #3b4e5b; }
-.assumptions, .changes-note { font-size: 11px; }
+.assumptions, .changes-note { font-size: 13px; }
 .section-heading h2 { font-size: 37px; font-weight: 500; }
 .hotel-grid { gap: 22px; }
 .hotel-card { background: #fff; border: 1px solid #dfdbd3; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px #152a3804; }
@@ -141,19 +144,19 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .hotel-image { height: 205px; }
 .hotel-image img { object-position: center; }
 .hotel-image-1 img, .hotel-image-2 img { object-position: center; }
-.image-note { font-size: 8px; padding: 3px 7px; background: #fffef2ed; color: #5c6566; }
-.recommendation { font-size: 10px; background: #fffaf1; color: #3f453f; border-radius: 3px; }
+.image-note { font-size: 13px; padding: 3px 7px; background: #fffef2ed; color: #5c6566; }
+.recommendation { font-size: 13px; background: #fffaf1; color: #3f453f; border-radius: 3px; }
 .hotel-body { padding: 23px; }
 .hotel-body h3 { font-family: var(--serif); font-size: 34px; font-weight: 500; letter-spacing: -.025em; margin-top: 10px; }
-.hotel-meta { font-size: 11px; color: #6c746e; }
+.hotel-meta { font-size: 13px; color: #6c746e; }
 .rating { border-radius: 4px; background: #e8ede6; color: #365440; font-weight: 600; }
-.hotel-logistics { font-size: 11px; margin-bottom: 20px; }
-.fit-list p { font-size: 12px; }
+.hotel-logistics { font-size: 13px; margin-bottom: 20px; }
+.fit-list p { font-size: 13px; }
 .fit-list p>span { color: #9b7b4d; }
-.compromise { font-size: 11px; color: #76644d; }
+.compromise { font-size: 13px; color: #76644d; }
 .total-price { font-size: 29px; font-weight: 500; letter-spacing: -1px; }
-.total-price>span { font-size: 10px; letter-spacing: 0; }
-.button { border-radius: 30px; background: #102d42; border: 1px solid #102d42; color: #fff; padding: 13px 22px; font-size: 12px; min-height: 45px; box-shadow: none; }
+.total-price>span { font-size: 13px; letter-spacing: 0; }
+.button { border-radius: 30px; background: #102d42; border: 1px solid #102d42; color: #fff; padding: 13px 22px; font-size: 13px; min-height: 45px; box-shadow: none; }
 .button:hover { background: #274d66; border-color: #274d66; }
 .button-secondary { color: #173347; background: transparent; border-color: #c8bda9; }
 .button-secondary:hover { color: #173347; background: #eee6d8; border-color: #b8a481; }
@@ -161,29 +164,29 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .composer-compact { border-radius: 13px; border-color: #d8d2c7; box-shadow: 0 8px 30px #273b4810; padding: 24px; background: #fff; }
 .composer-compact .composer-label { font-size: 13px; font-weight: 600; }
 .composer-compact textarea { font-size: 14px; line-height: 1.7; padding-top: 8px; }
-.composer-hint { font-size: 10px; }
-.parser-note { font-size: 10px; }
-.change-chip { border-radius: 8px; background: #f5f0e7; border-color: #d4c4aa; font-size: 11px; }
+.composer-hint { font-size: 13px; }
+.parser-note { font-size: 13px; }
+.change-chip { border-radius: 8px; background: #f5f0e7; border-color: #d4c4aa; font-size: 13px; }
 .change-chip:hover { background: #ebe1d1; border-color: #a88a5d; }
 .alternatives .eyebrow { color: #947044; }
 .detail-summary h2 { font-family: var(--serif); font-size: 49px; font-weight: 500; }
 .detail-summary>p:not(.detail-location) { font-size: 13px; line-height: 1.8; }
-.detail-facts>div { font-size: 12px; }
-.detail-reasons ul, .detail-compromises ul { font-size: 12px; }
+.detail-facts>div { font-size: 13px; }
+.detail-reasons ul, .detail-compromises ul { font-size: 13px; }
 .timeline-section>h3 { font-family: var(--serif); font-size: 35px; }
-.timeline-time, .timeline p { font-size: 11px; }
-.timeline strong { font-size: 12px; }
+.timeline-time, .timeline p { font-size: 13px; }
+.timeline strong { font-size: 13px; }
 .timeline li::before { background: #d8c8ae; }
 .timeline li::after { background: #a18357; }
-.policy-note { background: #f1eadf; border-left-color: #bb9766; border-radius: 0 8px 8px 0; font-size: 11px; }
+.policy-note { background: #f1eadf; border-left-color: #bb9766; border-radius: 0 8px 8px 0; font-size: 13px; }
 .checkout-panel { border-radius: 14px; border: 1px solid #ded4c4; background: #fff; box-shadow: 0 8px 30px #162d3d08; }
 .price-breakdown h3 { font-family: var(--serif); font-size: 37px; line-height: 1.02; }
-.price-breakdown dl, .breakdown-total>span { font-size: 12px; }
+.price-breakdown dl, .breakdown-total>span { font-size: 13px; }
 .breakdown-total strong { font-size: 32px; }
 .checkout-form h3 { font-family: var(--serif); font-size: 30px; }
-.checkout-form>label:not(.checkbox-label) { font-size: 11px; }
+.checkout-form>label:not(.checkbox-label) { font-size: 13px; }
 .checkout-form input:not([type=checkbox]) { border-radius: 6px; border-color: #d8d3c9; font-size: 14px; }
-.checkbox-label { font-size: 11px; }
+.checkbox-label { font-size: 13px; }
 .checkout-submit { border-radius: 7px; }
 .success-mark { color: #9e7b45; background: #f1eadc; border-color: #c7b38d; }
 .booked-section>h2 { font-size: 56px; }
@@ -197,60 +200,60 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .trips-dialog { width: min(620px,calc(100% - 36px)); max-height: calc(100dvh - 48px); padding: 30px; border: 1px solid #d7cdbd; border-radius: 18px; background: var(--paper); color: var(--ink); box-shadow: 0 32px 120px #071d2a55; }
 .trips-dialog::backdrop { background: #081a2b8c; backdrop-filter: blur(5px); }
 .dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
-.dialog-heading .eyebrow { color: #987343; font-size: 9px; }
+.dialog-heading .eyebrow { color: #987343; font-size: 13px; }
 .dialog-heading h2 { font-size: 44px; line-height: 1.1; }
 .dialog-close { display: grid; place-items: center; height: 44px; width: 44px; border: 1px solid #d8cebc; border-radius: 50%; background: none; }
 .dialog-close:hover { background: var(--sand); }
-.dialog-description { font-size: 12px; color: var(--muted); margin: 12px 0 20px; }
+.dialog-description { font-size: 13px; color: var(--muted); margin: 12px 0 20px; }
 .saved-trip-list { display: flex; flex-direction: column; gap: 10px; }
 .saved-trip-button { display: block; width: 100%; text-align: left; padding: 19px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
 .saved-trip-button:hover { background: #f2ebdf; border-color: #c4b191; }
 .saved-trip-inner { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
 .saved-trip-inner>span:first-child { display: flex; flex-direction: column; gap: 5px; }
-.saved-trip-status { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #8f7249; }
+.saved-trip-status { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #8f7249; }
 .saved-trip-inner strong { font-family: var(--serif); font-size: 29px; line-height: 1; }
-.saved-trip-inner>span:first-child>span:last-child { font-size: 11px; color: var(--muted); }
+.saved-trip-inner>span:first-child>span:last-child { font-size: 13px; color: var(--muted); }
 .saved-trip-price { display: flex; align-items: center; gap: 12px; font-size: 13px; white-space: nowrap; }
 .saved-trip-price svg { width: 18px; }
-.saved-trip-error { font-size: 12px; color: #954432; margin-bottom: 10px; }
+.saved-trip-error { font-size: 13px; color: #954432; margin-bottom: 10px; }
 .trips-empty { text-align: center; padding: 30px 8px; }
 .trips-empty>svg { color: #a0845c; margin: 0 auto 20px; }
 .trips-empty h3 { font-family: var(--serif); font-size: 29px; }
-.trips-empty p { font-size: 12px; margin: 12px auto 22px; max-width: 330px; color: var(--muted); }
+.trips-empty p { font-size: 13px; margin: 12px auto 22px; max-width: 330px; color: var(--muted); }
 
 @media (min-width: 1700px) {
   .lux-hero-inner { padding-top: 132px; padding-bottom: 36px; grid-template-columns: minmax(0,1fr) 260px; row-gap: 32px; }
   .lux-description { max-width: 710px; font-size: 18px; }
   .hero-composer textarea { font-size: 14px; }
   .hero-composer .composer-submit { font-size: 14px; min-width: 280px; }
-  .theme-chip { font-size: 12px; padding: 9px 16px; }
+  .theme-chip { font-size: 13px; padding: 9px 16px; }
   .destination-card { height: 220px; }
   .destination-heading h2 { font-size: 41px; }
-  .destination-description { font-size: 10px; }
+  .destination-description { font-size: 13px; }
 }
 @media (max-width: 1150px) {
   .wrap { width: calc(100% - 72px); }
   .site-header { padding: 0 36px; gap: 24px; }
-  .site-header .main-nav { margin-left: 0; gap: 22px; font-size: 11px; }
+  .site-header .main-nav { margin-left: 0; gap: 22px; font-size: 13px; }
   .brand-name { font-size: 33px; }
-  .brand-caption { font-size: 6px; letter-spacing: 2.6px; padding-left: 16px; }
+  .brand-caption { font-size: 13px; letter-spacing: 2.6px; padding-left: 16px; }
   .lux-hero-inner { grid-template-columns: minmax(0,1fr) 195px; column-gap: 28px; }
   .lux-intro h1 { font-size: 61px; }
   .lux-description { max-width: 560px; font-size: 14px; }
   .manifesto-quote { font-size: 29px; }
   .lux-search { grid-column: 1 / -1; padding-right: 95px; }
-  .hero-photo-credit { right: 36px; font-size: 8px; max-width: 90px; }
-  .hero-composer .composer-submit { min-width: 215px; padding-inline: 18px; font-size: 11px; }
-  .hero-composer textarea { font-size: 11px; }
-  .theme-chip { font-size: 10px; padding: 8px 12px; }
+  .hero-photo-credit { right: 36px; font-size: 13px; max-width: 90px; }
+  .hero-composer .composer-submit { min-width: 215px; padding-inline: 18px; font-size: 13px; }
+  .hero-composer textarea { font-size: 13px; }
+  .theme-chip { font-size: 13px; padding: 8px 12px; }
   .destination-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
   .destination-card { height: 220px; }
   .destination-name { font-size: 21px; }
-  .destination-description { font-size: 10px; }
+  .destination-description { font-size: 13px; }
   .destination-heading h2 { font-size: 33px; max-width: 550px; }
   .journey-steps { gap: 20px; }
   .has-session .site-header .main-nav { gap: 16px; }
-  .has-session .header-new { font-size: 10px; padding: 9px 12px; }
+  .has-session .header-new { font-size: 13px; padding: 9px 12px; }
 }
 @media (max-width: 850px) {
   .site-header { height: 74px; }
@@ -269,18 +272,18 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
   .lux-description span { display: inline; }
   .hero-manifesto { padding-left: 18px; }
   .manifesto-quote { font-size: 28px; }
-  .hero-manifesto>.eyebrow { font-size: 8px; letter-spacing: 1.7px; }
+  .hero-manifesto>.eyebrow { font-size: 13px; letter-spacing: 1.7px; }
   .hero-facts { gap: 18px; }
   .hero-facts strong { font-size: 22px; }
   .lux-search { padding-right: 0; }
   .hero-photo-credit { position: static; text-align: right; padding: 0 36px 15px; max-width: none; margin-top: -12px; }
   .hero-composer { gap: 10px; grid-template-columns: 43px minmax(0,1fr) auto; padding: 10px; border-radius: 15px; }
   .composer-emblem { width: 40px; height: 40px; }
-  .hero-composer .composer-submit { min-width: 182px; padding: 14px; font-size: 10px; }
+  .hero-composer .composer-submit { min-width: 182px; padding: 14px; font-size: 13px; }
   .hero-composer .composer-submit>span { gap: 9px; }
-  .hero-composer textarea { min-height: 66px; height: 66px; font-size: 12px; line-height: 1.7; }
+  .hero-composer textarea { min-height: 66px; height: 66px; font-size: 13px; line-height: 1.7; }
   .destination-heading h2 { font-size: 32px; max-width: 470px; }
-  .outline-button { padding: 10px 12px; font-size: 9px; }
+  .outline-button { padding: 10px 12px; font-size: 13px; }
   .destination-card { height: 208px; }
   .journey-heading h2 { font-size: 38px; }
   .journey-steps { grid-template-columns: repeat(2,minmax(0,1fr)); row-gap: 28px; }
@@ -302,13 +305,13 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
   .header-actions { gap: 9px; }
   .header-search { width: 32px; }
   .header-search svg { width: 21px; }
-  .header-new { font-size: 10px; padding: 8px 11px; }
+  .header-new { font-size: 13px; padding: 8px 11px; }
   .has-session .header-search { display: none; }
-  .site-header .main-nav { top: 72px; padding: 20px; font-size: 12px; gap: 15px 22px; }
+  .site-header .main-nav { top: 72px; padding: 20px; font-size: 13px; gap: 15px 22px; }
   .lux-hero-image { object-position: 58% 50%; }
   .lux-hero-shade { background: linear-gradient(90deg,#0b2232de,#102b398a),linear-gradient(0deg,#0b2031b0,transparent); }
   .lux-hero-inner { padding-top: 108px; padding-bottom: 24px; display: flex; flex-direction: column; gap: 26px; }
-  .lux-intro>.eyebrow { font-size: 8px; letter-spacing: 2px; margin-bottom: 19px; }
+  .lux-intro>.eyebrow { font-size: 13px; letter-spacing: 2px; margin-bottom: 19px; }
   .lux-intro h1 { font-size: clamp(42px,11.5vw,65px); line-height: .98; letter-spacing: -.025em; }
   .lux-description { margin-top: 21px; font-size: 13px; line-height: 1.7; max-width: 460px; }
   .hero-manifesto { display: none; }
@@ -318,17 +321,17 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
   .composer-emblem svg { width: 21px; height: 21px; }
   .hero-composer textarea { font-size: 16px; line-height: 1.5; min-height: 94px; height: 94px; padding: 2px 0; }
   .hero-composer .composer-bottom { grid-column: 1 / -1; padding-top: 5px; }
-  .hero-composer .composer-submit { min-height: 48px; width: 100%; font-size: 12px; min-width: 0; }
+  .hero-composer .composer-submit { min-height: 48px; width: 100%; font-size: 13px; min-width: 0; }
   .hero-composer .composer-submit>span { gap: 20px; }
   .theme-chips { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 13px; }
-  .theme-chip { padding: 10px 9px; min-height: 44px; width: 100%; font-size: 9px; }
+  .theme-chip { padding: 10px 9px; min-height: 44px; width: 100%; font-size: 13px; }
   .theme-chip>span { display: flex; justify-content: center; width: 100%; gap: 6px; }
   .theme-chip svg { width: 16px; height: 16px; }
-  .hero-demo-note { font-size: 9px; line-height: 1.65; margin-top: 15px; max-width: 340px; }
-  .hero-photo-credit { padding: 0 20px 16px; margin-top: -8px; font-size: 8px; text-align: left; opacity: .8; }
+  .hero-demo-note { font-size: 13px; line-height: 1.65; margin-top: 15px; max-width: 340px; }
+  .hero-photo-credit { padding: 0 20px 16px; margin-top: -8px; font-size: 13px; text-align: left; opacity: .8; }
   .destinations-section { padding: 29px 0 25px; }
   .destination-heading { margin-bottom: 18px; align-items: flex-start; gap: 12px; }
-  .destination-heading .eyebrow { font-size: 8px; letter-spacing: 1.7px; margin-bottom: 8px; }
+  .destination-heading .eyebrow { font-size: 13px; letter-spacing: 1.7px; margin-bottom: 8px; }
   .destination-heading h2 { font-size: 31px; line-height: 1.03; max-width: 280px; }
   .outline-button { padding: 8px 9px; margin-top: 22px; font-size: 0; }
   .outline-button svg { width: 20px; height: 20px; }
@@ -337,28 +340,28 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
   .destination-card { height: 186px; border-radius: 9px; }
   .destination-copy { left: 12px; right: 26px; bottom: 14px; gap: 5px; }
   .destination-name { font-size: 17px; }
-  .destination-description { font-size: 8px; line-height: 1.5; }
+  .destination-description { font-size: 13px; line-height: 1.5; }
   .destination-arrow { width: 24px; height: 24px; right: 8px; bottom: 12px; }
   .destination-arrow svg { width: 14px; height: 14px; }
-  .destination-note { font-size: 9px; margin-top: 13px; line-height: 1.7; }
+  .destination-note { font-size: 13px; margin-top: 13px; line-height: 1.7; }
   .journey-section { padding-top: 25px; padding-bottom: 29px; }
   .journey-heading h2 { font-size: 35px; }
   .journey-heading h2 em { display: block; }
   .journey-steps { gap: 25px 18px; }
   .journey-steps li { padding-top: 13px; }
   .step-number { font-size: 27px; }
-  .journey-steps h3 { font-size: 12px; line-height: 1.4; margin-top: 10px; }
-  .journey-steps p { font-size: 10px; line-height: 1.7; }
-  .journey-parser-note { font-size: 9px; line-height: 1.7; }
-  .site-footer { gap: 12px; font-size: 9px; padding-top: 22px; }
+  .journey-steps h3 { font-size: 13px; line-height: 1.4; margin-top: 10px; }
+  .journey-steps p { font-size: 13px; line-height: 1.7; }
+  .journey-parser-note { font-size: 13px; line-height: 1.7; }
+  .site-footer { gap: 12px; font-size: 13px; padding-top: 22px; }
   .footer-brand { font-size: 23px; }
-  .footer-brand>span { display: block; margin: 3px 0 0; font-size: 9px; }
+  .footer-brand>span { display: block; margin: 3px 0 0; font-size: 13px; }
   .has-session #main.wrap { padding-top: 23px; }
   .results-title { font-size: 42px; line-height: 1; }
-  .session-title-row .eyebrow { font-size: 8px; }
-  .condition-list { font-size: 11px; gap: 9px; }
-  .assistant-message p { font-size: 12px; }
-  .assumptions, .changes-note { font-size: 10px; padding-left: 39px; }
+  .session-title-row .eyebrow { font-size: 13px; }
+  .condition-list { font-size: 13px; gap: 9px; }
+  .assistant-message p { font-size: 13px; }
+  .assumptions, .changes-note { font-size: 13px; padding-left: 39px; }
   .section-heading h2 { font-size: 33px; max-width: 250px; }
   .hotel-grid { grid-template-columns: 1fr; gap: 20px; }
   .hotel-card:last-child:nth-child(3) { grid-column: auto; }
@@ -366,32 +369,32 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
   .hotel-body { padding: 21px; }
   .hotel-body h3 { font-size: 34px; }
   .total-price { font-size: 28px; }
-  .compromise { font-size: 11px; line-height: 1.7; }
-  .card-bottom .button { font-size: 12px; min-height: 47px; }
+  .compromise { font-size: 13px; line-height: 1.7; }
+  .card-bottom .button { font-size: 13px; min-height: 47px; }
   .composer-compact { padding: 19px; }
   .composer-compact textarea { font-size: 16px; }
-  .composer-compact .composer-label { font-size: 12px; }
-  .composer-compact .composer-submit { font-size: 11px; padding: 12px 14px; }
-  .composer-hint { font-size: 9px; }
-  .change-chip { font-size: 10px; }
+  .composer-compact .composer-label { font-size: 13px; }
+  .composer-compact .composer-submit { font-size: 13px; padding: 12px 14px; }
+  .composer-hint { font-size: 13px; }
+  .change-chip { font-size: 13px; }
   .detail-summary h2 { font-size: 42px; }
-  .detail-facts>div, .detail-reasons ul, .detail-compromises ul { font-size: 12px; }
+  .detail-facts>div, .detail-reasons ul, .detail-compromises ul { font-size: 13px; }
   .timeline-section>h3 { font-size: 34px; }
-  .timeline strong { font-size: 12px; }
-  .timeline-time { font-size: 9px; }
-  .timeline p { font-size: 11px; }
+  .timeline strong { font-size: 13px; }
+  .timeline-time { font-size: 13px; }
+  .timeline p { font-size: 13px; }
   .checkout-panel { padding: 22px; }
   .price-breakdown h3 { font-size: 35px; }
   .checkout-form h3 { font-size: 29px; }
   .checkout-form input:not([type=checkbox]) { font-size: 16px; }
   .booked-section>h2 { font-size: 43px; }
-  .order-actions .button { font-size: 12px; }
+  .order-actions .button { font-size: 13px; }
   .trips-dialog { padding: 23px 18px; }
   .dialog-heading h2 { font-size: 38px; }
   .saved-trip-button { padding: 15px; }
   .saved-trip-inner { align-items: flex-start; }
-  .saved-trip-price { font-size: 11px; gap: 6px; padding-top: 20px; }
-  .saved-trip-inner>span:first-child>span:last-child { font-size: 10px; }
+  .saved-trip-price { font-size: 13px; gap: 6px; padding-top: 20px; }
+  .saved-trip-inner>span:first-child>span:last-child { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -400,7 +403,7 @@ body:not(.has-session) #main.wrap { width: 100%; max-width: none; }
 .hotel-intent-note { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; margin-top: 18px; padding: 14px 0; border-block: 1px solid var(--line, #ddd8cf); font-size: 13px; }
 .hotel-intent-note p { margin: 0; flex: 1 1 280px; line-height: 1.6; }
 .hotel-intent-note .text-button { flex-shrink: 0; }
-.hypothetical-action { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; line-height: 1.6; }
+.hypothetical-action { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 13px; line-height: 1.6; }
 .clarification-questions { margin-top: 20px; }
 @media (min-width: 720px) {
   .hotel-grid.hotel-grid-single { grid-template-columns: minmax(0, 1fr); max-width: 960px; }

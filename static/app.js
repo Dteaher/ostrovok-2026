@@ -1,4 +1,7 @@
-import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages } from './trip-ui.js';
+import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages, journeyView, nextJourneyHash, preserveMessageDraft, priceAudience, travelLabels, priceEntries, readableDates, preferenceLabels, offerComparison } from './trip-ui.js?v=20261028-chat';
+import { ExplanationLoader } from './explanation.js?v=20261028-deadline';
+import { downloadPlan } from './plan-document.js?v=20261028-plan';
+import { DestinationLoader, validExternal } from './destination-context.js?v=20261028-data';
 
 (() => {
   'use strict';
@@ -15,7 +18,53 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
   };
   const plural = (n, one, few, many) => n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
   const nights = n => `${n} ${plural(n, 'ночь', 'ночи', 'ночей')}`;
-  const state = { session: null, config: null, pending: false, restoring: false, error: '', showResults: false, draft: '', checkout: { name: '', email: '', accepted: false } };
+  const state = { session: null, config: null, pending: false, restoring: false, error: '', draft: '', clarificationDate: '', checkout: { name: '', email: '', accepted: false } };
+  state.chatOpen = window.matchMedia('(min-width: 1100px)').matches;
+  let destinationData = null;
+  let destinationDataKey = null;
+  const destinationLoader = new DestinationLoader({ request, current: () => state.session,
+    update: data => {
+      destinationData = data;
+      destinationDataKey = `${state.session?.id}:${state.session?.revision}`;
+      document.querySelector('.destination-context')?.replaceWith(destinationPanel());
+    }
+  });
+
+  function draftKey() { return `rivane-draft-${state.session?.id || 'new'}`; }
+  function saveDraft() {
+    try { localStorage.setItem(draftKey(), state.draft); } catch { /* Editing works without storage. */ }
+  }
+  function restoreDraft() {
+    try { state.draft = localStorage.getItem(draftKey()) || ''; } catch { state.draft = ''; }
+  }
+  const explanations = new ExplanationLoader({
+    getSession: () => state.session,
+    request,
+    apply: agent => {
+      if (state.pending || !state.session) return;
+      state.session.agent = agent;
+      const previous = document.querySelector('.concierge-notes');
+      if (!previous) return;
+      const open = previous.querySelector('details')?.open;
+      const focused = previous.contains(document.activeElement) ? document.activeElement.textContent : null;
+      const panel = conciergePanel();
+      if (!panel) return;
+      panel.querySelector('details').open = open;
+      previous.replaceWith(panel);
+      const mode = document.querySelector('.chat-mode');
+      const connected = agent.mode === 'llm' || state.session.parser_mode === 'llm';
+      if (mode) {
+        mode.textContent = connected ? 'ИИ подключён · по данным поездки' : 'ИИ недоступен · основные команды работают';
+        mode.classList.toggle('is-connected', connected);
+      }
+      if (agent.mode === 'llm') {
+        state.messageRetry = false;
+        document.querySelector('.chat-retry')?.remove();
+      }
+      if (focused) [...panel.querySelectorAll('summary, button')].find(element => element.textContent === focused)?.focus({ preventScroll: true });
+      announce(agent.mode === 'llm' ? 'Персональное объяснение готово.' : 'Проверенные факты доступны. Можно продолжать подбор.');
+    }
+  });
   let imageSession = null;
   let imageCache = {};
   const examples = [
@@ -69,7 +118,8 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
       arrow: 'M3 12h18 M15 6l6 6-6 6',
       close: 'm6 6 12 12 M6 18 18 6',
       bag: 'M4 7h16v14H4Z M9 7V3h6v4 M9 11v6 M15 11v6',
-      check: 'm4 12 5 5L20 6'
+      check: 'm4 12 5 5L20 6',
+      calendar: 'M4 5h16v16H4Z M8 2v6 M16 2v6 M4 10h16 M8 14h2 M14 14h2 M8 18h2'
     };
     for (const [key, value] of Object.entries({ width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(key, value);
     const path = document.createElementNS(svg.namespaceURI, 'path');
@@ -123,21 +173,24 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     const notice = node('p', { class: 'saved-trip-error', role: 'status' });
     const close = () => dialog.close();
     const trips = savedTrips();
-    dialog.append(node('div', { class: 'dialog-heading' }, node('div', {}, smallLabel('Вернёмся к вашим планам'), node('h2', { id: 'trips-title' }, 'Мои поездки')), button(icon('close'), close, 'dialog-close', { 'aria-label': 'Закрыть мои поездки' })), node('p', { class: 'dialog-description' }, 'Ваши подборы и демозаявки. Сохранены в этом браузере.'), notice, list);
+    dialog.append(node('div', { class: 'dialog-heading' }, node('div', {}, smallLabel('Вернёмся к вашим планам'), node('h2', { id: 'trips-title' }, 'Мои поездки')), button(icon('close'), close, 'dialog-close', { 'aria-label': 'Закрыть мои поездки' })), node('p', { class: 'dialog-description' }, 'Подборки и сохранённые планы в этом браузере.'), notice, list);
     if (!trips.length) list.append(node('div', { class: 'trips-empty' }, icon('bag', 40), node('h3', {}, 'Ваша первая история ещё впереди'), node('p', {}, 'Расскажите об отдыхе — здесь останутся ваши подборы и планы.'), button('Начать путешествие', () => { close(); seedIdea(''); }, 'button')));
     trips.forEach(trip => {
       const thumbnail = typeof trip.thumbnail === 'string' && /^\/static\/media\/stays\/demo-(coastal|garden|room|courtyard)\.webp$/.test(trip.thumbnail) ? trip.thumbnail : '/static/media/stays/demo-garden.webp';
-      const action = button(node('span', { class: 'saved-trip-inner' }, node('span', { class: 'saved-trip-thumbnail' }, node('img', { src: thumbnail, alt: '', width: 120, height: 90, loading: 'lazy' })), node('span', { class: 'saved-trip-copy' }, node('span', { class: 'saved-trip-status' }, trip.stage === 'booked' ? 'Демозаявка оформлена' : 'Подбор сохранён'), node('strong', {}, trip.title), node('span', {}, `${trip.destination} · ${date(trip.date)}`)), node('span', { class: 'saved-trip-price' }, trip.total ? money(trip.total) : 'Продолжить', icon('arrow'))), async () => {
+      const action = button(node('span', { class: 'saved-trip-inner' }, node('span', { class: 'saved-trip-thumbnail' }, node('img', { src: thumbnail, alt: '', width: 120, height: 90, loading: 'lazy' })), node('span', { class: 'saved-trip-copy' }, node('span', { class: 'saved-trip-status' }, trip.stage === 'booked' ? 'План сохранён' : 'Подборка'), node('strong', {}, trip.title), node('span', {}, `${trip.destination} · ${date(trip.date)}`)), node('span', { class: 'saved-trip-price' }, trip.total ? money(trip.total) : 'Продолжить', icon('arrow'))), async () => {
         list.querySelectorAll('button').forEach(control => { control.disabled = true; });
         notice.textContent = 'Возвращаем ваш план…';
         try {
           const restored = await request(`/api/sessions/${encodeURIComponent(trip.id)}`);
           if (!dialog.open || !dialog.isConnected) return;
-          if (state.session?.id !== restored.id) state.checkout = { name: '', email: '', accepted: false };
+          if (state.session?.id !== restored.id) { state.checkout = { name: '', email: '', accepted: false }; state.clarificationDate = ''; }
+          explanations.cancel();
           state.session = restored;
-          state.error = ''; state.draft = ''; state.showResults = false;
+          state.error = ''; restoreDraft();
+          window.history.replaceState(null, '', restored.stage === 'booked' ? '#confirmation' : restored.stage === 'selected' ? '#trip' : '#options');
           saveSession(); close(); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
           document.querySelector('[data-view-heading]')?.focus();
+          void explanations.load();
         } catch (error) {
           if (dialog.open) notice.textContent = error.status === 404 ? 'Этот подбор больше недоступен. Начните новую поездку.' : error.message;
         } finally { list.querySelectorAll('button').forEach(control => { control.disabled = false; }); }
@@ -182,24 +235,34 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
 
   async function mutate(path, body, method = 'POST') {
     if (state.pending) return;
+    explanations.cancel();
     state.pending = true;
     state.error = '';
     let updated = null;
+    const previousHash = location.hash;
+    const previousDraftKey = draftKey();
     setPending(true);
-    announce('Собираем ваш план. Пожалуйста, подождите.');
+    announce(pendingLabel());
     try {
       const session = await request(path, { method, body: JSON.stringify(body) });
       if (session.selected_plan?.id !== state.session?.selected_plan?.id) state.checkout.accepted = false;
       state.session = session;
       updated = session;
-      state.showResults = false;
-      state.draft = '';
+      const hash = nextJourneyHash(session, previousHash, path.endsWith('/select'));
+      window.history[path.endsWith('/select') ? 'pushState' : 'replaceState'](null, '', hash);
+      if (body.message) state.messageRetry = preserveMessageDraft(session);
+      if (body.message && state.draft === body.message && !state.messageRetry) {
+        state.draft = '';
+        try { localStorage.removeItem(previousDraftKey); } catch { /* Storage is optional. */ }
+      }
+      saveDraft();
       saveSession();
-      announce(session.stage === 'booked' ? 'Демонстрационная заявка создана.' : 'План обновлён.');
+      announce(session.stage === 'booked' ? 'План сохранён в «Моих поездках».' : 'План обновлён.');
     } catch (error) {
       if (error.status === 409 && state.session) {
         try {
           state.session = await request(`/api/sessions/${encodeURIComponent(state.session.id)}`);
+          if (journeyView(state.session, location.hash) !== 'checkout' && location.hash === '#checkout') window.history.replaceState(null, '', '#trip');
           state.error = error.message.includes('другой вкладке') ? 'План изменился в другой вкладке. Мы загрузили свежую версию. Проверьте условия и повторите действие.' : error.message;
         } catch { state.error = 'Не удалось обновить план. Перезагрузите страницу и повторите действие.'; }
       } else if (error.status === 404 && state.session) {
@@ -211,32 +274,49 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
       render();
       if (!document.querySelector('.trip-editor[open]')) {
         if (state.error) document.querySelector('.alert-error')?.focus();
-        else {
+        else if (body.message && state.chatOpen) {
+          document.querySelector('#refine-message')?.focus({ preventScroll: true });
+        } else {
           document.querySelector('[data-view-heading]')?.focus({ preventScroll: true });
           window.scrollTo({ top: 0, behavior: 'instant' });
         }
       }
     }
+    void explanations.load();
     return updated;
+  }
+
+  function pendingLabel() {
+    const text = (state.draft || '').toLowerCase();
+    if (/сравни|отлич/.test(text)) return 'Сравниваем варианты…';
+    if (/почему|объясни|подробнее/.test(text)) return 'Готовим объяснение…';
+    if (main.querySelector('.checkout-submit')) return 'Сохраняем ваш план…';
+    return state.session ? 'Перепроверяем условия и стоимость…' : 'Подбираем поездку…';
   }
 
   function setPending(pending) {
     main.setAttribute('aria-busy', String(pending));
     newTrip.disabled = pending;
-    for (const control of main.querySelectorAll('button, textarea, input, select')) control.disabled = pending;
+    for (const control of main.querySelectorAll('button:not(.chat-toggle):not(.chat-close), textarea, input, select')) control.disabled = pending;
     const submit = main.querySelector('.composer-submit');
     if (submit) {
       submit.classList.toggle('is-loading', pending);
-      submit.textContent = pending ? 'Планируем путешествие…' : state.session ? 'Обновить план ↗' : 'Спланировать путешествие →';
+      submit.textContent = pending ? pendingLabel() : state.session?.plans?.length || state.session?.selected_plan ? 'Применить пожелание' : 'Показать поездки';
     }
     const checkout = main.querySelector('.checkout-submit');
-    if (checkout && pending) checkout.textContent = 'Создаём демозаявку…';
+    if (checkout && pending) checkout.textContent = 'Сохраняем в «Мои поездки»…';
+    const dateSubmit = main.querySelector('.clarify-date-submit');
+    if (dateSubmit && pending) dateSubmit.textContent = 'Подбираем…';
+    if (pending && state.session && !main.querySelector('.concierge-working')) {
+      main.append(node('div', { class: 'concierge-working', 'aria-hidden': 'true' }, icon('spark', 18), node('span', {}, pendingLabel())));
+    }
   }
 
   function sendMessage(message) {
     const cleaned = message.trim();
     if (!cleaned || state.pending) return;
     state.draft = cleaned;
+    saveDraft();
     if (state.session) return mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/messages`, { message: cleaned, revision: state.session.revision });
     return mutate('/api/sessions', { message: cleaned });
   }
@@ -254,25 +334,26 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
 
   function parserNote() {
     return (state.session?.parser_mode || state.config?.parser_mode) === 'llm'
-      ? 'Запрос разбирает языковая модель. Условия и цены проверяет сервис.'
-      : 'Демоверсия: запрос разбирается по ключевым условиям. Проверьте, что мы всё поняли верно.';
+      ? 'Проверьте распознанные даты, гостей и пожелания перед выбором.'
+      : 'Понимаем основные условия поездки. Проверьте даты, гостей и пожелания перед выбором.';
   }
 
   function composer(compact = false) {
+    const clarifying = compact && state.session?.stage === 'clarify';
     const input = node('textarea', {
       id: compact ? 'refine-message' : 'trip-message', name: 'message', rows: 2,
       maxlength: '3000', required: true, 'aria-label': compact ? 'Что изменить в поездке' : 'Расскажите о своей поездке',
-      placeholder: compact ? 'Например: «А если на 2 ночи меньше и с бассейном?»' : 'Куда вы хотите отправиться? Например: «Хочу в Сочи на неделю, с красивым отелем, завтраками и бюджетом до 160 000 ₽ на двоих»',
-      oninput: event => { state.draft = event.target.value; },
+      placeholder: clarifying ? 'Например: «С 15 ноября на 5 ночей, до 120 000 ₽»' : compact ? 'Например: «На ночь короче, отель оставь»' : 'Сочи, с 15 ноября на неделю, вдвоём, до 160 тысяч. Завтрак желателен.',
+      oninput: event => { state.draft = event.target.value; saveDraft(); },
       onkeydown: event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); sendMessage(input.value); } }
     });
     input.value = state.draft;
     return node('form', { class: `composer ${compact ? 'composer-compact' : 'hero-composer'}`, onsubmit: event => { event.preventDefault(); sendMessage(input.value); } },
       !compact ? node('span', { class: 'composer-emblem' }, icon('spark', 26)) : null,
-      node('label', { for: input.id, class: 'composer-label' }, compact ? 'Давайте сделаем план ещё ближе к вам' : 'Какую поездку вы задумали?'),
+      node('label', { for: input.id, class: 'composer-label' }, clarifying ? 'Уточните условия поездки' : compact ? 'Спросите или уточните поездку' : 'Какую поездку вы задумали?'),
       input,
       node('div', { class: 'composer-bottom' }, node('span', { class: 'composer-hint' }, compact ? 'Остальные пожелания сохраним' : 'Куда, когда, с кем и что для вас важно'),
-        node('button', { type: 'submit', class: 'button composer-submit' }, compact ? 'Обновить план ↗' : node('span', {}, 'Спланировать путешествие', icon('arrow')))));
+        node('button', { type: 'submit', class: 'button composer-submit' }, compact ? node('span', {}, clarifying ? 'Продолжить подбор' : 'Отправить', icon('arrow', 18)) : node('span', {}, 'Спланировать путешествие', icon('arrow')))));
   }
 
   function landing() {
@@ -285,26 +366,26 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     ];
     const steps = [
       ['01', 'Одно желание', 'Расскажите о вашем отдыхе. Обычными словами, без десятка фильтров.'],
-      ['02', 'Подбор с объяснением', 'Сравните подходящие отели, полную стоимость и важные компромиссы.'],
+      ['02', 'Выберите поездку', 'Сравните отели вместе с перелётом или поездом и трансфером.'],
       ['03', 'План под вас', 'Измените пожелания одной фразой. Остальные условия сохранятся.'],
-      ['04', 'Всё в одном месте', 'Проверьте поездку и завершите демонстрационное оформление.']
+      ['04', 'Сохраните свой вариант', 'План останется в «Моих поездках» в этом браузере.']
     ];
     return node('div', { class: 'landing enter' },
       node('section', { class: 'lux-hero', 'aria-labelledby': 'hero-title' },
-        node('img', { class: 'lux-hero-image', src: '/static/media/rivane/hero.webp', alt: 'Закат над морским побережьем и панорамный бассейн в Каше, Турция. Атмосферная фотография.', width: 2000, height: 1334, fetchpriority: 'high' }),
+        node('img', { class: 'lux-hero-image', src: '/static/media/rivane/hero-sochi.webp', alt: 'Морской вокзал и яхты в порту Сочи.', width: 2400, height: 1600, fetchpriority: 'high' }),
         node('div', { class: 'lux-hero-shade' }),
         node('div', { class: 'lux-hero-inner wrap' },
-          node('div', { class: 'lux-intro' }, smallLabel('Больше, чем просто отели'),
-            node('h1', { id: 'hero-title', tabindex: '-1', 'data-view-heading': true }, 'Путешествия,', node('br'), 'которые начинаются', node('br'), node('em', {}, 'с одного желания')),
-            node('p', { class: 'lux-description' }, 'Расскажите, каким вы представляете свой отдых. ', node('span', {}, 'O!RIVANE поможет выбрать направление, сравнит варианты и составит персональный план путешествия.'))),
-          node('aside', { class: 'hero-manifesto', 'aria-label': 'Наш подход' }, smallLabel('Откройте больше возможностей'),
-            node('p', { class: 'manifesto-quote' }, 'Больше, чем', node('br'), 'выбор отеля.', node('br'), node('em', {}, 'Ближе к вашему'), node('br'), 'отдыху.'),
+          node('div', { class: 'lux-intro' }, smallLabel('Путешествия по Большому Сочи'),
+            node('h1', { id: 'hero-title', tabindex: '-1', 'data-view-heading': true }, 'Ваш отдых в Сочи,', node('br'), 'который начинается', node('br'), node('em', {}, 'с одного желания')),
+            node('p', { class: 'lux-description' }, 'Отель, перелёт или поезд и трансфер — в одном плане. ', node('span', {}, 'Опишите отдых своими словами: сравним варианты и покажем общую стоимость.'))),
+          node('aside', { class: 'hero-manifesto', 'aria-label': 'Что входит в план поездки' }, smallLabel('В одном плане'),
+            node('ul', { class: 'hero-plan-services' }, ['Отель', 'Перелёт или поезд', 'Трансфер'].map(label => node('li', {}, icon('check', 17), label))),
             node('span', { class: 'manifesto-rule' }),
             node('div', { class: 'hero-facts' }, node('div', {}, node('strong', {}, '20'), node('span', {}, 'демоотелей')), node('div', {}, node('strong', {}, '6'), node('span', {}, 'районов Сочи')))),
           node('div', { class: 'lux-search' }, composer(),
             node('div', { class: 'theme-chips', id: 'inspiration', 'aria-label': 'Идеи для путешествия' }, themes.map(([name, label, prompt]) => button(node('span', {}, icon(name), label), () => sendMessage(prompt), 'example-button theme-chip'))),
-            node('p', { class: 'hero-demo-note' }, 'Подбираем по демонстрационному каталогу Большого Сочи. Без реальной оплаты и бронирования.'))),
-        node('p', { class: 'hero-photo-credit' }, 'Атмосфера путешествий · Каш, Турция')),
+            node('p', { class: 'hero-demo-note' }, 'Сохраните план в этом браузере. Без бронирования и оплаты.'))),
+        node('p', { class: 'hero-photo-credit' }, 'Сочи · Морской вокзал')),
       node('section', { class: 'destinations-section wrap', id: 'destinations', 'aria-labelledby': 'destinations-title' },
         node('div', { class: 'destination-heading' }, node('div', {}, smallLabel('Откройте Большой Сочи'), node('h2', { id: 'destinations-title' }, 'Идеи для вашего следующего путешествия')),
           button(node('span', {}, 'Помогите выбрать', icon('arrow')), () => seedIdea('Хочу в Большой Сочи, но пока не знаю, какой район выбрать. Важны море и спокойный отдых.'), 'outline-button')),
@@ -312,7 +393,7 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
           node('img', { src: `/static/media/rivane/${destination.image}.webp`, alt: '', width: 600, height: 500, loading: 'lazy' }),
           node('span', { class: 'destination-copy' }, node('span', { class: 'destination-name' }, destination.label), node('span', { class: 'destination-description' }, destination.description)),
           node('span', { class: 'destination-arrow' }, icon('arrow'))), () => seedIdea(`${destination.prompt} с ${futureDate()} на неделю вдвоём, до 160 тысяч, с завтраком`), 'destination-card', { 'aria-label': `Спланировать отдых: ${destination.name}` }))),
-        node('p', { class: 'destination-note' }, 'Один регион — разные впечатления. Фотографии районов иллюстративные. Отели, наличие и цены в подборе демонстрационные.')),
+        node('p', { class: 'destination-note' }, 'Один регион — разные впечатления. Фотографии районов иллюстративные.')),
       node('section', { class: 'journey-section wrap', id: 'how', 'aria-labelledby': 'how-title' },
         node('div', { class: 'journey-heading' }, smallLabel('Всё сложится в путешествие'), node('h2', { id: 'how-title' }, 'От первого «хочу»', node('em', {}, ' до вашего плана.'))),
         node('ol', { class: 'journey-steps' }, steps.map(([number, title, description]) => node('li', {}, node('span', { class: 'step-number' }, number), node('h3', {}, title), node('p', {}, description)))),
@@ -419,40 +500,69 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     const people = [`${r.adults} ${plural(r.adults, 'взрослый', 'взрослых', 'взрослых')}`];
     if (r.children_ages?.length) people.push(`${r.children_ages.length} ${plural(r.children_ages.length, 'ребёнок', 'ребёнка', 'детей')} (${r.children_ages.join(', ')} лет)`);
     const transport = { flight: 'Перелёт', train: 'Поезд', self: 'Своим ходом' }[r.transport] || 'Дорога';
-    const terms = [r.destination || 'Куда — уточним', `${date(r.check_in)} · ${nights(r.nights)}`, people.join(' + '), r.budget ? `До ${money(r.budget)}${r.budget_scope === 'hotel' ? ' на отель' : ' за всё'}` : 'Бюджет не задан', `${transport}${r.origin ? ' · ' + r.origin : ''}`];
-    const flags = [['breakfast', 'Завтраки'], ['pool', 'Бассейн'], ['pets', 'С питомцем'], ['refundable', 'С отменой'], ['direct_only', 'Без пересадок'], ['quiet', 'Тихий отдых'], ['accessible', 'Доступная среда']];
-    const priority = key => r.preference_modes?.[key] === 'preferred' || (key === 'quiet' && !r.preference_modes?.quiet) ? 'желательно' : 'обязательно';
-    flags.forEach(([key, label]) => { if (r[key]) terms.push(`${label} · ${['pets', 'accessible'].includes(key) ? 'обязательно' : priority(key)}`); });
-    if (r.max_beach_m != null) terms.push(`Море до ${r.max_beach_m} м · ${priority('max_beach_m')}`);
-    if (r.min_rating) terms.push(`Оценка от ${r.min_rating} · ${priority('min_rating')}`);
-    if (r.stars) terms.push(`От ${r.stars} звёзд · ${priority('stars')}`);
+    const clarifying = state.session.stage === 'clarify';
+    const terms = [r.destination || 'Куда — уточним', clarifying && !r.check_in ? nights(r.nights) : `${date(r.check_in)} · ${nights(r.nights)}`, people.join(' + '), r.budget ? `До ${money(r.budget)}${r.budget_scope === 'hotel' ? ' на отель' : ' за всё'}` : clarifying ? null : 'Бюджет не задан', `${transport}${r.origin ? ' · ' + r.origin : ''}`].filter(Boolean);
+    const wishes = preferenceLabels(r);
     return node('section', { class: 'conditions', 'aria-label': 'Сохранённые условия поездки' },
-      node('div', { class: 'conditions-heading' }, smallLabel('Условия поездки'), button(node('span', {}, 'Изменить условия', icon('arrow', 15)), editConditions, 'text-button edit-conditions', { id: 'edit-conditions', hidden: state.session.stage === 'booked' })),
-      node('ul', { class: 'condition-list' }, terms.map((term, index) => node('li', { class: index < 5 ? 'condition-primary' : 'condition-wish' }, term))));
+      node('div', { class: 'condition-main' }, node('ul', { class: 'condition-list' }, terms.map((term, index) => node('li', { class: 'condition-primary' }, index === 0 ? icon('sea', 19) : null, term))),
+        button(node('span', {}, 'Изменить', icon('arrow', 16)), editConditions, 'text-button edit-conditions', { id: 'edit-conditions', 'aria-label': 'Изменить условия', hidden: state.session.stage === 'booked' })),
+      wishes.length ? node('ul', { class: 'preference-strengths', 'aria-label': 'Важность условий' }, wishes.map(wish => node('li', {}, wish))) : null);
   }
 
   function sessionIntro() {
     const session = state.session;
-    const selectedView = session.stage === 'selected' && !state.showResults;
+    const view = journeyView(session, location.hash);
+    const selectedView = view === 'trip';
     const selectedPlan = selectedView ? session.selected_plan : null;
-    const phase = session.stage === 'booked' ? 2 : selectedView ? 1 : 0;
-    const title = session.stage === 'clarify' ? 'Уточним вашу поездку' : session.stage === 'booked' ? 'План сохранён' : selectedPlan ? selectedPlan.hotel.name : session.hotel_intent ? 'Новый план в вашем отеле' : 'Отели для вашей поездки';
-    const routineReply = /^(Нашёл|Вы выбрали|Пересобрал|Сохранил отель|Эти условия уже действуют)/.test(session.assistant_message || '');
+    const phase = view === 'confirmation' ? 3 : view === 'checkout' ? 2 : selectedView ? 1 : 0;
+    const title = session.stage === 'clarify' ? 'Уточним вашу поездку' : view === 'confirmation' ? 'Ваш план сохранён' : view === 'checkout' ? 'Сохраните поездку' : selectedPlan ? selectedPlan.hotel.name : session.hypothetical ? 'Сравнение условий' : session.change_receipt ? 'План пересчитан' : session.hotel_intent && !session.selected_plan ? 'Ваш обновлённый вариант' : 'Выберите поездку';
+    const routineReply = /^(Нашёл|Вы выбрали|Пересобрал|Сохранил отель|Эти условия уже действуют|Восстановил сохранённые условия)/.test(session.assistant_message || '');
     const requiresAttention = session.clarifications?.length || session.hypothetical || !session.plans.length || !routineReply;
-    const reply = node('p', {}, session.assistant_message);
+    const reply = node('p', {}, readableDates(session.assistant_message).replace(/AI не успел ответить за отведённое время\.[\s\S]*/, 'ИИ задерживается. Условия распознаны локально — проверьте их перед выбором.'));
+    const steps = ['Выбор поездки', 'Ваш план', 'Сохранение', 'Готово'];
     return node('section', { class: `session-intro${selectedView ? ' session-intro-selected' : ''}` },
-      node('ol', { class: 'journey-progress', 'aria-label': 'Этапы поездки' }, ['Подбор отелей', 'План и оформление', 'Подтверждение'].map((label, index) => node('li', { class: index === phase ? 'is-current' : index < phase ? 'is-complete' : '', 'aria-current': index === phase ? 'step' : null }, node('span', { 'aria-hidden': 'true' }, index < phase ? '✓' : `0${index + 1}`), selectedView && index === 0 ? button(label, viewResults, 'progress-back', { 'aria-label': 'К вариантам поездки' }) : label))),
-      node('div', { class: 'session-title-row' }, node('div', {}, smallLabel(selectedView ? 'Ваш план поездки' : 'От желания к маршруту'),
+      node('ol', { class: 'journey-progress', 'aria-label': 'Этапы поездки' }, steps.map((label, index) => node('li', { class: index === phase ? 'is-current' : index < phase ? 'is-complete' : '', 'aria-current': index === phase ? 'step' : null }, node('span', { 'aria-hidden': 'true' }, index < phase ? '✓' : `0${index + 1}`), index < phase && view !== 'confirmation' && index < 2 ? button(label, () => navigateJourney(index === 0 ? '#options' : '#trip'), 'progress-back', { 'aria-label': index === 0 ? 'К вариантам поездки' : 'Назад к поездке' }) : label))),
+      view === 'clarify' ? null : node('div', { class: 'session-title-row' }, node('div', {}, smallLabel(selectedView ? 'Ваш план поездки' : 'От желания к маршруту'),
         node('h1', { class: 'results-title', tabindex: '-1', 'data-view-heading': true }, title),
-        selectedPlan ? node('p', { class: 'selected-location' }, `${selectedPlan.hotel.area} · ${selectedPlan.hotel.stars} звезды · оценка ${String(selectedPlan.hotel.rating).replace('.', ',')}`) : null),
-        selectedPlan ? node('div', { class: 'selected-total' }, node('strong', {}, money(selectedPlan.price.total)), node('span', {}, `За всех · ${nights(selectedPlan.dates.nights)} · ${tripScope(selectedPlan)}`)) : node('span', { class: 'demo-tag' }, node('span', { class: 'status-dot' }), 'Демонстрационный подбор')),
-      session.stage === 'booked' ? null : conditions(session.requirements),
-      session.stage !== 'booked' && !session.clarifications?.length && requiresAttention ? node('div', { class: 'assistant-message', role: 'status' }, node('span', { class: 'assistant-mark', 'aria-hidden': 'true' }, 'О!'), reply) : null,
-      session.changes?.length ? node('p', { class: 'changes-note' }, 'Обновили: ', session.changes.map(change => change.summary || change.label || change.field).join('; '), '. Остальные условия сохранены.') : null,
-      session.hotel_intent && session.stage !== 'booked' && !selectedView ? node('div', { class: 'hotel-intent-note' }, node('p', {}, 'Сохраняем ', node('strong', {}, session.hotel_intent.name)), button('Рассмотреть другие отели', () => sendMessage('Покажи другие отели'), 'text-button')) : null,
+        selectedPlan ? node('p', { class: 'selected-location' }, `${selectedPlan.hotel.area} · ${selectedPlan.hotel.stars}★ · ${selectedPlan.hotel.beach_m} м до моря`) : view === 'results' && session.plans.length && !session.change_receipt ? node('p', { class: 'intro-caption' }, session.plans.length > 1 ? 'Проживание и выбранный транспорт — сравните общую стоимость.' : 'Условия сохранены. Проверьте обновлённое предложение.') : view === 'checkout' ? node('p', { class: 'intro-caption' }, 'План появится в «Моих поездках» в этом браузере.') : null),
+        node('span', { class: 'demo-tag' }, 'Демокаталог')),
+      view === 'confirmation' || view === 'checkout' ? null : conditions(session.requirements),
+      view === 'results' && session.change_receipt && !session.hypothetical ? changeReceipt(session.change_receipt) : null,
+      session.hypothetical ? hypotheticalSummary(session.hypothetical) : null,
+      session.stage !== 'booked' && !session.hypothetical && !session.clarifications?.length && requiresAttention && !session.agent?.requested ? node('div', { class: 'assistant-message', role: 'status' }, node('span', { class: 'assistant-mark', 'aria-hidden': 'true' }, 'О!'), reply) : null,
+      session.changes?.length ? node('details', { class: 'changes-note' }, node('summary', {}, icon('check', 15), 'Условия обновлены', node('span', { 'aria-hidden': 'true' }, '+')), node('p', {}, readableDates(session.changes.map(change => change.summary || change.label || change.field).join('; ')), '. Остальные условия сохранены.')) : null,
+      session.hotel_intent && view === 'results' ? node('div', { class: session.change_receipt ? 'receipt-alternative' : 'hotel-intent-note' }, !session.change_receipt ? node('p', {}, 'Сохраняем ', node('strong', {}, session.hotel_intent.name)) : null,
+        session.change_receipt && !session.hypothetical ? button('Отменить правку', () => sendMessage('Верни предыдущее изменение'), 'text-button') : null,
+        button('Другие отели', () => sendMessage('Покажи другие отели'), 'text-button', { 'aria-label': 'Рассмотреть другие отели' })) : null,
       session.stage !== 'clarify' && session.clarifications?.length ? clarificationQuestions() : null,
-      session.hypothetical?.total_matches > 0 ? node('div', { class: 'hypothetical-action' }, button('Применить это изменение', () => patchRequirements(session.hypothetical.patch), 'choice-chip'), node('span', {}, 'Только после нажатия изменим условия и пересчитаем предложение.')) : null,
-      session.stage !== 'booked' && !selectedView ? sessionContext(!requiresAttention) : null);
+      session.hypothetical?.total_matches > 0 ? node('div', { class: 'hypothetical-action' }, button('Применить это изменение', () => patchRequirements(session.hypothetical.patch), 'choice-chip'), node('span', {}, 'Только после нажатия изменим условия и пересчитаем предложение.')) : null);
+  }
+
+  function changeReceipt(receipt) {
+    const difference = receipt.after_total - receipt.before_total;
+    return node('section', { class: 'change-receipt', 'aria-label': 'Результат пересчёта' },
+      node('div', {}, node('strong', {}, receipt.hotel_preserved ? 'Отель сохранён' : 'Предложение обновлено'), node('span', {}, receipt.hotel_name)),
+      node('div', { class: 'receipt-duration' }, receipt.before_nights !== receipt.after_nights ? `${nights(receipt.before_nights)} → ${nights(receipt.after_nights)}` : nights(receipt.after_nights), receipt.before_check_in !== receipt.after_check_in ? node('small', {}, `${date(receipt.before_check_in)} → ${date(receipt.after_check_in)}`) : null),
+      node('div', { class: 'receipt-price' }, node('span', {}, node('s', {}, money(receipt.before_total)), ' → ', node('strong', {}, money(receipt.after_total))),
+        node('small', {}, difference === 0 ? 'Стоимость не изменилась' : `${difference < 0 ? 'Дешевле' : 'Дороже'} на ${money(Math.abs(difference))}`)));
+  }
+
+  function hypotheticalSummary(comparison) {
+    return node('section', { class: 'hypothetical-summary', 'aria-label': 'Сравнение без изменения поездки', role: 'status' },
+      node('strong', {}, 'Только сравниваем — поездка не изменена'),
+      comparison.total_matches ? node('dl', {},
+        node('div', {}, node('dt', {}, 'Минимум сейчас'), node('dd', {}, comparison.baseline_min_total == null ? 'Нет вариантов' : money(comparison.baseline_min_total))),
+        node('div', {}, node('dt', {}, 'Минимум после изменения'), node('dd', {}, money(comparison.min_total)))) : node('p', {}, comparison.diagnostic?.message || 'Для этих условий вариантов нет.'),
+      node('p', {}, `${comparison.hotel_id ? 'В том же отеле. ' : 'Отель может измениться. '}Сравниваем минимальные тарифы, а не доплату к выбранному предложению.`));
+  }
+
+  function journeyCommand() {
+    const chosen = Boolean(state.session.hotel_intent);
+    const examples = chosen ? [['На ночь короче', 'Оставь этот отель, но сократи поездку на день'], ['Сначала сравнить', 'А если сократить поездку на день?']] : [['Сравнить варианты', 'Сравни первый и второй варианты'], ['Почему эти отели', 'Почему эти варианты?']];
+    return node('section', { class: 'journey-command', 'aria-labelledby': 'command-title' },
+      node('div', { class: 'command-heading' }, node('h2', { id: 'command-title' }, 'Меняйте планы одной фразой'), node('span', {}, 'Неупомянутые условия сохраняются')),
+      composer(true),
+      node('div', { class: 'command-examples' }, examples.map(([label, message]) => button(label, () => sendMessage(message), 'text-button'))));
   }
 
   function sessionContext(includeReply = true) {
@@ -460,21 +570,46 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     const assumptions = [...new Set([...(session.assumptions || []), ...(session.requirements.assumptions || [])])];
     return node('details', { class: 'session-context' }, node('summary', {}, icon('check', 16), 'Как подобрали поездку', node('span', { 'aria-hidden': 'true' }, '+')),
       includeReply ? node('p', {}, session.assistant_message) : null,
-      assumptions.length ? node('ul', {}, assumptions.map(value => node('li', {}, value))) : null,
+      assumptions.length ? node('ul', {}, assumptions.map(value => node('li', {}, readableDates(value)))) : null,
       (session.requirements.unsupported || []).length ? node('ul', {}, session.requirements.unsupported.map(value => node('li', {}, 'Пока не можем учесть: ' + value))) : null);
   }
 
-  function clarificationQuestions() {
-    const questions = (state.session.clarifications || []).map(question => {
-      const choices = (question.options || []).map(option => button(option.label, () => patchRequirements({ [question.field]: option.value }), 'choice-chip'));
+  function clarificationQuestions(detailedDates = false) {
+    const questions = (state.session.clarifications || []).slice(0, 1).map(question => {
+      if (detailedDates && question.field === 'check_in') {
+        const input = node('input', { id: 'clarify-check-in', name: 'check_in', type: 'date', required: true, min: futureDate(0), value: state.clarificationDate, oninput: event => { state.clarificationDate = event.target.value; } });
+        const choices = (question.options || []).map(option => {
+          const parsed = new Date(`${option.value}T12:00:00`);
+          const parts = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).formatToParts(parsed);
+          return button(node('span', { class: 'clarify-date-copy' }, node('small', {}, parsed.toLocaleDateString('ru-RU', { weekday: 'long' })), node('strong', {}, parts.find(part => part.type === 'day').value), node('span', {}, parts.find(part => part.type === 'month').value), icon('arrow', 16)), () => patchRequirements({ check_in: option.value }), 'choice-chip clarify-date-option', { 'aria-label': `Заехать ${parsed.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}` });
+        });
+        return node('section', { class: 'clarify-item clarify-arrival', 'aria-labelledby': 'clarify-date-title' },
+          node('h2', { id: 'clarify-date-title' }, 'Выберите дату заезда'),
+          node('p', { class: 'clarify-question-note' }, question.question?.replace(/^Когда хотите заехать\?\s*/, '') || 'Выберите удобную дату начала отдыха.'),
+          choices.length ? node('div', { class: 'clarify-date-options' }, choices) : null,
+          node('form', { class: 'clarify-date-form', onsubmit: event => { event.preventDefault(); patchRequirements({ check_in: input.value }); } },
+            node('div', { class: 'clarify-custom-date' }, node('label', { for: input.id }, 'Своя дата заезда'), input),
+            node('button', { type: 'submit', class: 'button clarify-date-submit' }, node('span', {}, 'Показать поездки', icon('arrow', 19)))));
+      }
+      const choices = (question.options || []).map(option => button(question.field === 'check_in' ? date(option.value) : option.label, () => patchRequirements({ [question.field]: option.value }), 'choice-chip'));
       return node('div', { class: 'clarify-item' }, node('h2', {}, question.question), node('div', { class: 'chip-row' }, choices));
     });
     return node('div', { class: 'clarification-questions' }, questions);
   }
 
   function clarification() {
-    return node('section', { class: 'clarify-section' }, node('div', { class: 'clarify-preface' }, node('span', { class: 'clarify-symbol', 'aria-hidden': 'true' }, icon('spark', 28)), node('p', {}, 'Пара деталей поможет подобрать подходящий вариант. Уже указанные условия сохранены.')), clarificationQuestions(),
-      composer(true), node('p', { class: 'parser-note' }, parserNote()));
+    const hasDate = state.session.clarifications?.[0]?.field === 'check_in';
+    return node('section', { class: 'clarify-section' },
+      node('div', { class: 'clarify-layout' },
+        node('figure', { class: 'clarify-photo' }, node('img', { src: '/static/media/rivane/hero-sochi.webp', alt: 'Морской вокзал и гавань Сочи', width: 2400, height: 1600 }), node('figcaption', {},
+          node('div', {}, node('p', { class: 'clarify-destination' }, 'Большой Сочи'),
+            node('h1', { tabindex: '-1', 'data-view-heading': true }, hasDate ? 'Когда начнётся' : 'Продумано', node('em', {}, hasDate ? 'ваш отдых?' : 'под вас.'))),
+          node('small', {}, 'Сочи · Морской вокзал'))),
+        node('div', { class: 'clarify-panel' },
+          node('p', { class: 'clarify-kicker' }, icon(hasDate ? 'calendar' : 'spark', 18), hasDate ? 'Начало путешествия' : 'Детали вашей поездки'),
+          clarificationQuestions(true),
+          node('p', { class: 'clarify-saved' }, icon('check', 16), 'Остальные условия уже сохранены'),
+          button('Уточнить в чате', () => toggleChat(true), 'text-button'))));
   }
 
   function stayImage(plan) {
@@ -496,11 +631,20 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     return cutoff ? `Бесплатно до ${date(cutoff[1])}, ${cutoff[2]} МСК` : 'Смотрите условия тарифа';
   }
 
-  function tripScope(plan) { return plan.transport.mode === 'self' ? 'без самостоятельной дороги' : 'с дорогой'; }
+  function tripScope(plan) { return travelLabels(plan.transport.mode).scope; }
+
+  function timelineTitle(item, plan) {
+    if (item.title === 'Выезд из Москвы') return `${travelLabels(plan.transport.mode).departure} из Москвы`;
+    if (plan.transport.mode !== 'flight') return item.title;
+    if (item.title === 'Обратная дорога') return 'Обратный вылет';
+    return /^Прибытие в (Сочи|Москву)$/.test(item.title) ? item.title.replace('Прибытие', 'Прилёт') : item.title;
+  }
 
   function hotelCard(plan, index) {
     const hotel = plan.hotel;
-    const badge = state.session.plan_labels?.[plan.id] || (index === 0 ? 'Подходит вашим условиям' : null);
+    const comparison = offerComparison(plan, state.session.plans);
+    const originalBadge = state.session.plan_labels?.[plan.id];
+    const badge = state.session.plans.length === 1 ? 'Подходит вашим условиям' : comparison.premium === 0 ? 'Доступнее из показанных' : originalBadge === 'Ближе к пожеланиям' && !comparison.preferenceGains.length ? 'Другой уровень комфорта' : originalBadge;
     const factLike = /м до пляжа|рейтинг|завтрак включ|бесплатная отмена/i;
     const uniqueReasons = (plan.reasons || []).filter(reason => !factLike.test(reason));
     const mainReason = uniqueReasons[0] || (plan.preference_matches || [])[0] || (badge === 'Самая низкая цена' ? 'Самая доступная поездка в этом подборе' : (hotel.features || []).includes('pool') ? 'Бассейн на территории' : badge === 'Высокий рейтинг' ? 'Один из лучших рейтингов в подборе' : 'Соответствует обязательным условиям');
@@ -508,18 +652,24 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     const premium = plan.price.total - cheapestShown;
     const compromise = (plan.compromises || []).find(value => /нужно \d.*номер/i.test(value)) || (plan.preference_compromises || [])[0] || (plan.compromises || []).find(value => !/тариф|отмен|данные|демо|питание|завтрак/i.test(value)) || (premium > 0 ? `На ${money(premium)} дороже самого доступного из показанных` : (plan.warnings || []).some(value => /раннее заселение не включено/i.test(value)) ? 'Ранний заезд не включён' : 'Личные расходы не включены');
     const selectLabel = state.session.clarifications?.length ? 'Сначала уточним условия' : state.session.hotel_intent && !state.session.selected_plan ? 'Подтвердить новый план' : 'Посмотреть план';
-    return node('article', { class: 'hotel-card' },
+    return node('article', { class: `hotel-card${index === 0 ? ' hotel-card-recommended' : ''}` },
       node('div', { class: `hotel-image hotel-image-${index}` }, node('img', { src: stayImage(plan), alt: '', loading: 'lazy', width: 1200, height: 800 }),
-        node('span', { class: 'image-note' }, 'Иллюстрация демоотеля'), badge ? node('span', { class: 'recommendation' }, badge) : null),
+        node('span', { class: 'image-note' }, 'Иллюстрация'), badge ? node('span', { class: 'recommendation' }, badge) : null),
       node('div', { class: 'hotel-body' },
         node('div', { class: 'hotel-meta' }, node('span', {}, hotel.area || 'Сочи', hotel.stars ? ` · ${hotel.stars}★` : ''), node('span', { class: 'rating' }, hotel.rating ? String(hotel.rating).replace('.', ',') : '—', node('span', { class: 'sr-only' }, ' — оценка отеля'))),
         node('h3', {}, hotel.name),
+        node('p', { class: 'total-price' }, money(plan.price.total), node('span', {}, `${priceAudience(plan.guests)} · ${nights(plan.dates.nights)}`), node('small', { class: 'price-includes' }, tripScope(plan))),
         node('dl', { class: 'stay-facts' }, [['До моря', `${hotel.beach_m} м`], ['Питание', mealLabel(plan)], ['Отмена', cancellationLabel(plan)]].map(([label, value]) => node('div', {}, node('dt', {}, label), node('dd', {}, value)))),
-        node('div', { class: 'fit-list' }, node('p', {}, node('span', { 'aria-hidden': 'true' }, '✓'), mainReason)),
-        node('p', { class: 'compromise' }, node('span', {}, 'Учтите: '), compromise),
-        node('div', { class: 'card-bottom' }, node('p', { class: 'total-price' }, money(plan.price.total), node('span', {}, `За всех · ${nights(plan.dates.nights)} · ${tripScope(plan)}`)),
-          node('details', { class: 'card-price-details' }, node('summary', {}, 'Что входит в стоимость'), node('dl', {}, [['Отель', plan.price.hotel], ['Дорога', plan.price.transport], ['Трансфер', plan.price.transfer], ['Обязательные доплаты', plan.price.extras]].map(([label, value], item) => node('div', {}, node('dt', {}, label), node('dd', {}, plan.transport.mode === 'self' && (item === 1 || item === 2) ? 'Не рассчитано' : money(value)))))),
-          button(node('span', {}, selectLabel, arrow()), () => mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/select`, { plan_id: plan.id, revision: state.session.revision }), 'button button-full', { disabled: state.session.clarifications?.length > 0 }))));
+        node('div', { class: 'fit-list' }, node('p', {}, node('span', { 'aria-hidden': 'true' }, '✓'), mainReason.replace('Тихий район и спокойная территория по демо-каталогу', 'Спокойная территория').replace('Самая доступная поездка в этом подборе', 'Самый доступный вариант'))),
+        comparison.premium > 0 ? node('details', { class: 'offer-tradeoff' }, node('summary', {}, `За что +${money(comparison.premium)}`), node('strong', {}, `К «${comparison.baselineName}»`),
+          comparison.facts.length ? node('ul', {}, comparison.facts.slice(0, 3).map(fact => node('li', {}, fact))) : null,
+          node('p', {}, comparison.preferenceGains.length ? `Дополнительно из пожеланий: ${comparison.preferenceGains.join('; ')}.` : 'Дополнительных выполненных пожеланий нет. Выбирайте, важны ли вам эти отличия.'),
+          comparison.preferenceLosses.length ? node('p', {}, `Компромисс: ${comparison.preferenceLosses.join('; ')}.`) : null) : null,
+        /нужно \d.*номер/i.test(compromise) ? node('p', { class: 'compromise' }, node('span', {}, 'Учтите: '), compromise) : null,
+        node('div', { class: 'card-bottom' },
+          button(node('span', {}, selectLabel, arrow()), () => mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/select`, { plan_id: plan.id, revision: state.session.revision }), `button button-full${index ? ' button-secondary' : ''}`, { disabled: state.session.clarifications?.length > 0 }),
+          node('details', { class: 'card-price-details' }, node('summary', {}, 'Состав цены и детали'), node('dl', {}, priceEntries(plan).map(([label, value]) => node('div', {}, node('dt', {}, label), node('dd', {}, value === null ? 'Не рассчитано' : money(value))))),
+            node('p', {}, compromise)))));
   }
 
   function suggestionButton(suggestion) {
@@ -547,23 +697,46 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
   function results() {
     const session = state.session;
     return node('div', { class: 'results-content' },
-      node('div', { class: 'section-heading' }, node('h2', {}, session.plans.length ? session.hotel_intent ? 'Предложение пересчитано' : 'Сравните и выберите' : 'Условия пока не совпали'),
-        session.plans.length ? node('p', {}, `${session.plans.length} ${plural(session.plans.length, 'вариант', 'варианта', 'вариантов')} из ${session.total_matches} подходящих`) : null),
+      node('div', { class: 'section-heading' }, node('h2', {}, session.plans.length ? session.hotel_intent && !session.selected_plan ? 'Проверьте новую стоимость' : 'Подобрано для вас' : 'Условия пока не совпали'),
+        session.plans.length ? node('p', {}, `${session.total_matches} ${plural(session.total_matches, 'отель подходит', 'отеля подходят', 'отелей подходят')} · показываем ${session.plans.length}`) : null),
+      session.plans.length > 1 ? node('div', { class: 'result-priorities', 'aria-label': 'Порядок вариантов' }, node('span', {}, 'Сначала:'),
+        [['balanced', 'Рекомендуемые', 'Покажи рекомендованные варианты'], ['price', 'Дешевле', 'Покажи сначала дешевле'], ['beach', 'Ближе к морю', 'Покажи сначала ближе к морю']].map(([key, label, message]) => button(label, () => sendMessage(message), 'text-button', { 'aria-pressed': String((session.ranking || 'balanced') === key) }))) : null,
       session.plans.length ? node('div', { class: `hotel-grid${session.plans.length === 1 ? ' hotel-grid-single' : ''}` }, session.plans.slice(0, 3).map(hotelCard)) : node('div', { class: 'empty-state' },
         node('span', { class: 'empty-symbol', 'aria-hidden': 'true' }, '↝'), node('h3', {}, session.hotel_intent ? 'Проверили сохранённый отель' : 'Точных совпадений пока нет'), node('p', {}, session.diagnostic?.message || 'В демонстрационном каталоге нет предложений для этих условий.'),
         session.hotel_alternative ? button(`${session.hotel_alternative.label} · ${session.hotel_alternative.total_matches}`, () => sendMessage('Покажи другие отели'), 'button button-secondary') : null),
-      alternatives(), composer(true), node('p', { class: 'parser-note' }, parserNote()), history());
+      supportTools());
+  }
+
+  function supportTools() {
+    const changes = alternatives();
+    return node('section', { class: 'journey-tools', 'aria-label': 'Уточнения и подробности' },
+      changes ? node('details', { class: 'alternatives-disclosure', open: !state.session.plans.length }, node('summary', {}, icon('bag', 20), node('span', {}, 'Другие условия и цены', node('small', {}, 'Посмотреть возможные компромиссы')), node('span', { class: 'disclosure-plus', 'aria-hidden': 'true' }, '+')), changes) : null,
+      node('div', { class: 'technical-details' }, sessionContext(), node('p', { class: 'parser-note' }, parserNote())));
+  }
+
+  function conciergePanel() {
+    const agent = state.session?.agent;
+    if (!agent?.facts?.length) return null;
+    return node('section', { class: 'concierge-notes', 'aria-label': 'Объяснение подбора' },
+      agent.explanation_status === 'pending' ? node('p', { class: 'concierge-notice', role: 'status' }, 'Варианты уже готовы. Персональное AI-объяснение загружается…') : null,
+      node('details', { open: Boolean(agent.requested) },
+        node('summary', {}, icon('spark', 20), node('span', {}, agent.title, node('small', {}, 'На основе цен и условий текущих предложений')), node('span', { 'aria-hidden': 'true' }, '+')),
+        agent.notice ? node('p', { class: 'concierge-notice', role: 'status' }, agent.notice) : null,
+        node('ul', { class: 'concierge-facts' }, agent.facts.map(fact => node('li', {}, readableDates(fact.text)))),
+        node('p', { class: 'concierge-provenance' }, 'Сравнение рассчитано по текущим предложениям демокаталога. Условия поездки не меняются.')),
+      agent.question ? node('p', { class: 'concierge-question' }, agent.question) : null,
+      node('div', { class: 'concierge-actions' }, (agent.actions || []).map(action => button(action.label, () => sendMessage(action.message), 'choice-chip'))));
   }
 
   function priceBreakdown(plan) {
     const selfTravel = plan.transport.mode === 'self';
-    const entries = [['Проживание', plan.price.hotel], ['Дорога туда и обратно', plan.price.transport], ['Трансфер', plan.price.transfer], ['Дополнительно', plan.price.extras]];
+    const entries = priceEntries(plan);
     return node('div', { class: 'price-breakdown' },
-      node('h3', {}, selfTravel ? 'Стоимость включённых услуг' : 'Вся поездка, одна сумма'),
+      node('h3', {}, selfTravel ? 'Стоимость включённых услуг' : 'Из чего складывается цена'),
       selfTravel ? node('p', { class: 'muted small price-exclusion-note' }, 'Стоимость самостоятельной дороги и трансфера не рассчитана и не включена в сумму.') : null,
-      node('dl', {}, entries.map(([label, value], index) => node('div', {}, node('dt', {}, label), node('dd', {}, selfTravel && (index === 1 || index === 2) ? 'Не рассчитано' : money(value))))),
-      node('div', { class: 'breakdown-total' }, node('span', {}, 'Итого за всех'), node('strong', {}, money(plan.price.total))),
-      node('p', { class: 'muted small' }, `${nights(plan.dates.nights)} · ${plan.guests.adults} взр.${plan.guests.children_ages.length ? ` + ${plan.guests.children_ages.length} дет.` : ''} · рубли`));
+      node('dl', {}, entries.map(([label, value]) => node('div', {}, node('dt', {}, label), node('dd', {}, value === null ? 'Не рассчитано' : money(value))))),
+      node('div', { class: 'breakdown-total' }, node('span', {}, 'Итого'), node('strong', {}, money(plan.price.total))),
+      node('p', { class: 'muted small' }, `${priceAudience(plan.guests)} · ${nights(plan.dates.nights)}`));
   }
 
   function tripDetails(plan, showTitle = true) {
@@ -578,7 +751,7 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     const compromises = (plan.compromises || []).filter(value => !/невозвратный тариф/i.test(value));
     const warnings = (plan.warnings || []).filter(value => value !== plan.data_label && !/демонстрационн[а-я]* (отел|цены|данные)|все объекты/i.test(value));
     return node('div', { class: 'trip-detail-content' },
-      node('figure', { class: 'plan-hero' }, node('img', { src: stayImage(plan), alt: '', width: 1200, height: 800 }), node('figcaption', { class: 'image-note' }, 'Иллюстрация демоотеля')),
+      node('figure', { class: 'plan-hero' }, node('img', { src: stayImage(plan), alt: '', width: 1200, height: 800 }), node('figcaption', { class: 'image-note' }, 'Иллюстрация')),
       node('section', { class: 'detail-summary' }, showTitle ? node('h2', {}, plan.hotel.name) : null,
         node('p', { class: 'detail-location' }, `${plan.hotel.area} · ${plan.hotel.stars}★ · оценка ${String(plan.hotel.rating).replace('.', ',')} · ${plan.hotel.beach_m} м до моря`),
         node('p', { class: 'hotel-description' }, plan.hotel.description.replace(/^Вымышленный отель в районе [^.]+\.\s*/, '')),
@@ -587,42 +760,45 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
           node('div', {}, node('dt', {}, 'Проживание'), node('dd', {}, `${plan.room.name} · ${plan.room.rooms} ${plural(plan.room.rooms, 'номер', 'номера', 'номеров')}`)),
           node('div', {}, node('dt', {}, 'Гости'), node('dd', {}, `${plan.guests.adults} взрослых${plan.guests.children_ages.length ? ` · дети ${plan.guests.children_ages.join(', ')} лет` : ''}`)),
           node('div', {}, node('dt', {}, 'Питание'), node('dd', {}, mealLabel(plan))),
-          node('div', {}, node('dt', {}, 'Дорога'), node('dd', {}, transport.title)),
+          node('div', {}, node('dt', {}, travelLabels(transport.mode).service), node('dd', {}, transport.title)),
           node('div', {}, node('dt', {}, 'Трансфер'), node('dd', {}, plan.transfer.title))),
         node('div', { class: 'rate-policy' }, node('strong', {}, 'Отмена'), node('p', { class: 'cancellation-policy' }, readablePolicy(plan.policy))),
         secondaryReasons.length ? node('details', { class: 'detail-reasons route-details' }, node('summary', {}, 'Почему подходит вашим пожеланиям'), node('ul', {}, secondaryReasons.map(reason => node('li', {}, reason)))) : null,
         compromises.length ? node('div', { class: 'detail-compromises' }, node('h3', {}, 'Главное учесть'), node('ul', {}, compromises.map(value => node('li', {}, value)))) : null),
       node('section', { class: 'timeline-section' }, node('h3', {}, 'Маршрут поездки'),
         [...days].map(([day, items]) => node('section', { class: 'route-group' }, node('h4', {}, date(day)),
-          node('ol', { class: 'timeline' }, items.map(item => node('li', {}, node('time', { class: 'timeline-time', datetime: item.time }, item.time.slice(11, 16)), node('strong', {}, item.title)))))),
-        node('details', { class: 'route-details' }, node('summary', {}, 'Подробности дороги и трансферов'), node('ul', {}, (plan.timeline || []).map(item => node('li', {}, node('strong', {}, `${dateTime(item.time)} · ${item.title}`), node('p', {}, item.detail))))),
-        node('div', { class: 'policy-note' }, node('h3', {}, 'Важно о поездке'), warnings.map(warning => node('p', {}, warning)))));
+          node('ol', { class: 'timeline' }, items.map(item => node('li', {}, node('time', { class: 'timeline-time', datetime: item.time }, item.time.slice(11, 16)), node('strong', {}, timelineTitle(item, plan))))))),
+        node('details', { class: 'route-details' }, node('summary', {}, 'Подробности дороги и трансферов'), node('ul', {}, (plan.timeline || []).map(item => node('li', {}, node('strong', {}, `${dateTime(item.time)} · ${timelineTitle(item, plan)}`), node('p', {}, item.detail))))),
+        node('div', { class: 'policy-note' }, node('h3', {}, 'Важно о поездке'), warnings.map(warning => node('p', {}, readableDates(warning))))));
   }
 
   function checkoutForm(plan) {
     const needsAnswer = state.session.request_status === 'needs_clarification' || state.session.clarifications?.length > 0;
-    const name = node('input', { id: 'traveler-name', name: 'name', autocomplete: 'name', required: true, minlength: 2, maxlength: 100, placeholder: 'Имя и фамилия', oninput: event => { state.checkout.name = event.target.value; } });
-    const email = node('input', { id: 'traveler-email', name: 'email', type: 'email', autocomplete: 'email', required: true, maxlength: 254, placeholder: 'you@example.ru', oninput: event => { state.checkout.email = event.target.value; } });
+    const name = node('input', { id: 'traveler-name', name: 'name', autocomplete: 'name', minlength: 2, maxlength: 100, placeholder: 'Имя и фамилия', oninput: event => { state.checkout.name = event.target.value; } });
+    const email = node('input', { id: 'traveler-email', name: 'email', type: 'email', autocomplete: 'email', maxlength: 254, placeholder: 'you@example.ru', oninput: event => { state.checkout.email = event.target.value; } });
     const agreement = node('input', { id: 'demo-agreement', type: 'checkbox', required: true, onchange: event => { state.checkout.accepted = event.target.checked; } });
     name.value = state.checkout.name;
     email.value = state.checkout.email;
     agreement.checked = state.checkout.accepted;
-    return node('aside', { id: 'checkout', class: 'checkout-panel', 'aria-label': 'Оформление демонстрационной заявки' }, priceBreakdown(plan),
+    return node('section', { id: 'checkout', class: 'checkout-panel', 'aria-label': 'Сохранение плана поездки' },
       node('form', { class: 'checkout-form', onsubmit: event => {
         event.preventDefault();
-        if (!name.value.trim() || name.value.trim().length < 2) { name.setCustomValidity('Введите имя длиной от 2 символов.'); name.reportValidity(); name.addEventListener('input', () => name.setCustomValidity(''), { once: true }); return; }
-        mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/checkout`, { revision: state.session.revision, accept_demo: agreement.checked, traveler_name: name.value.trim(), email: email.value.trim() });
+        if (name.value.trim() && name.value.trim().length < 2) { name.setCustomValidity('Введите имя длиной от 2 символов.'); name.reportValidity(); name.addEventListener('input', () => name.setCustomValidity(''), { once: true }); return; }
+        mutate(`/api/sessions/${encodeURIComponent(state.session.id)}/checkout`, { revision: state.session.revision, accept_demo: agreement.checked, traveler_name: name.value.trim() || null, email: email.value.trim() || null });
       } },
-        node('h3', {}, 'Оформление поездки'), node('p', { class: 'small muted' }, 'Демозаявка без оплаты.'),
-        node('label', { for: name.id }, 'Ваше имя'), name, node('label', { for: email.id }, 'Электронная почта'), email,
-        node('p', { class: 'form-note' }, 'Используйте тестовые данные. Письмо не отправляется.'),
-        node('label', { class: 'checkbox-label', for: agreement.id }, agreement, node('span', {}, 'Подтверждаю демооформление: без реальной брони и списания денег.')),
+        node('div', { class: 'form-section-heading' }, node('div', {}, node('h2', {}, 'План останется с вами'), node('p', { class: 'small muted' }, 'Сохраните маршрут и расчёт в «Моих поездках». Контакты не нужны.'))),
+        node('details', { class: 'optional-contacts' }, node('summary', {}, 'Добавить имя и почту · необязательно'), node('label', { for: name.id }, 'Ваше имя'), name, node('label', { for: email.id }, 'Электронная почта'), email,
+          node('p', { class: 'form-note' }, 'Контакты попадут только в сохранённый план. Письмо не отправляется.')),
+        node('div', { class: 'checkout-total' }, node('span', {}, 'Итого за\u00a0поездку'), node('strong', {}, money(plan.price.total))),
+        stayCautions(plan),
+        node('label', { class: 'checkbox-label', for: agreement.id }, agreement, node('span', {}, 'Я понимаю: сохраняется план, бронирование не создаётся.')),
         needsAnswer ? node('p', { class: 'form-note', role: 'status' }, 'Сначала ответьте на уточнение выше. Текущий вариант сохранён для сравнения; состав и стоимость могут измениться.') : null,
-        node('button', { type: 'submit', class: 'button button-full checkout-submit', disabled: needsAnswer }, needsAnswer ? 'Сначала уточним условия' : 'Оформить демозаявку ↗')));
+        node('button', { type: 'submit', class: 'button button-full checkout-submit', disabled: needsAnswer }, needsAnswer ? 'Сначала уточним условия' : node('span', {}, 'Сохранить в «Мои поездки»', icon('arrow', 20)))));
   }
 
-  function viewResults() {
-    state.showResults = true;
+  function navigateJourney(hash) {
+    if (state.pending) return;
+    window.history.pushState(null, '', hash);
     render();
     document.querySelector('[data-view-heading]')?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -631,20 +807,57 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
   function selected() {
     const plan = state.session.selected_plan;
     if (!plan) return results();
+    const blocked = state.session.request_status === 'needs_clarification' || state.session.clarifications?.length;
+    const services = ['Проживание', plan.transport.mode === 'self' ? null : travelLabels(plan.transport.mode).service, plan.transport.mode === 'self' ? null : 'Трансфер'].filter(Boolean);
     return node('div', { class: 'selected-content' },
-      node('div', { class: 'mobile-checkout-link' }, node('p', {}, money(plan.price.total), node('span', {}, plan.transport.mode === 'self' ? 'За всех · без самостоятельной дороги' : 'За всю поездку · за всех')), node('a', { href: '#checkout', class: 'button' }, 'К оформлению ↓')),
-      node('div', { class: 'selected-layout' }, tripDetails(plan, false), checkoutForm(plan)), sessionContext(), composer(true), node('p', { class: 'parser-note' }, parserNote()), history());
+      node('section', { class: 'trip-showcase', 'aria-label': 'Обзор выбранной поездки' },
+        node('figure', { class: 'showcase-photo' }, node('img', { src: stayImage(plan), alt: 'Иллюстрация выбранного демоотеля', width: 1200, height: 800, fetchpriority: 'high' }), node('span', { class: 'showcase-rating' }, String(plan.hotel.rating).replace('.', ','), node('span', {}, 'оценка отеля')), node('figcaption', { class: 'image-note' }, 'Иллюстрация')),
+        node('div', { class: 'trip-decision' }, smallLabel('Ваш отдых в деталях'), node('h2', {}, plan.hotel.description.replace(/^Вымышленный отель в районе [^.]+\.\s*/, '') || 'Время для себя'),
+          node('dl', { class: 'decision-facts' }, [['Номер', `${plan.room.name} · ${plan.room.rooms} ${plural(plan.room.rooms, 'номер', 'номера', 'номеров')}`], ['Питание', mealLabel(plan)]].map(([label, value]) => node('div', {}, node('dt', {}, label), node('dd', {}, value)))),
+          node('div', { class: 'decision-price' }, node('span', {}, priceAudience(plan.guests)), node('strong', {}, money(plan.price.total)), node('small', {}, `За ${nights(plan.dates.nights)}`)),
+          node('ul', { class: 'included-services' }, services.map(service => node('li', {}, icon('check', 15), service))),
+          plan.transport.mode === 'self' ? node('p', { class: 'decision-exclusion' }, 'Самостоятельная дорога и трансфер не рассчитаны и не включены.') : null,
+          stayCautions(plan),
+          button(node('span', {}, blocked ? 'Сначала уточним условия' : 'Сохранить этот вариант', icon('arrow', 20)), () => navigateJourney('#checkout'), 'button decision-continue', { disabled: Boolean(blocked) }),
+          node('p', { class: 'decision-note' }, 'Сохранение без регистрации и контактов'))),
+      routePreview(plan),
+      node('details', { class: 'stay-detail-disclosure' }, node('summary', {}, 'Номер, транспорт и условия', node('span', { 'aria-hidden': 'true' }, '+')), node('dl', { class: 'detail-facts' }, [['Номер', `${plan.room.name} · ${plan.room.rooms} ${plural(plan.room.rooms, 'номер', 'номера', 'номеров')}`], ['Питание', mealLabel(plan)], [travelLabels(plan.transport.mode).service, plan.transport.title], ['Трансфер', plan.transfer.title]].map(([label, value]) => node('div', {}, node('dt', {}, label), node('dd', {}, value)))),
+        node('ul', { class: 'stay-warnings' }, (plan.warnings || []).filter(warning => warning !== plan.data_label).map(warning => node('li', {}, readableDates(warning))))),
+      supportTools());
+  }
+
+  function stayCautions(plan) {
+    const compromises = [...new Set(plan.compromises || [])].filter(value => !/невозвратный тариф/i.test(value));
+    return node('section', { class: 'stay-cautions', 'aria-label': 'Важные условия' },
+      node('div', { class: 'cancellation-summary' }, icon('check', 20), node('div', {}, node('h3', {}, plan.refundable ? 'Отмена по условиям тарифа' : 'Невозвратный тариф'), node('p', {}, readablePolicy(plan.policy)))),
+      compromises.length ? node('div', { class: 'compromise-summary' }, node('span', { class: 'caution-symbol', 'aria-hidden': 'true' }, '!'), node('div', {}, node('h3', {}, 'Перед выбором учтите'), node('p', {}, compromises.join(' · ')))) : null);
+  }
+
+  function routePreview(plan) {
+    const days = new Map();
+    (plan.timeline || []).forEach(item => {
+      const day = item.time.slice(0, 10);
+      if (!days.has(day)) days.set(day, []);
+      days.get(day).push(item);
+    });
+    return node('section', { class: 'route-preview timeline-section' },
+      node('div', { class: 'route-heading' }, smallLabel('Всё продумано'), node('h2', {}, 'Как пройдёт поездка')),
+      node('div', { class: 'route-days' }, [...days].map(([day, items]) => node('section', { class: 'route-group' }, node('div', { class: 'route-day-heading' }, node('h3', {}, date(day)), node('span', {}, day < plan.dates.check_in ? 'Дорога к отелю' : day >= plan.dates.check_out ? 'Возвращение' : 'Начало отдыха')), node('ol', { class: 'timeline' }, items.map(item => node('li', {}, node('time', { class: 'timeline-time', datetime: item.time }, item.time.slice(11, 16)), node('strong', {}, timelineTitle(item, plan)))))))),
+      node('details', { class: 'route-details' }, node('summary', {}, 'Расписание и детали трансферов', node('span', { 'aria-hidden': 'true' }, '+')), node('ul', {}, (plan.timeline || []).map(item => node('li', {}, node('strong', {}, `${dateTime(item.time)} · ${timelineTitle(item, plan)}`), node('p', {}, item.detail))))),
+      node('p', { class: 'route-notice' }, 'Демонстрационное расписание · время московское. Раннее заселение не включено.'));
+  }
+
+  function checkoutView() {
+    const plan = state.session.selected_plan;
+    return node('div', { class: 'checkout-content' },
+      node('div', { class: 'checkout-layout' }, checkoutForm(plan),
+        node('aside', { class: 'checkout-recap', 'aria-label': 'Выбранная поездка и стоимость' },
+          node('div', { class: 'recap-stay' }, node('img', { src: stayImage(plan), alt: '', width: 180, height: 140 }), node('div', {}, smallLabel(`${plan.hotel.area} · ${plan.hotel.stars}★`), node('h2', {}, plan.hotel.name), node('p', {}, `${date(plan.dates.check_in)} — ${date(plan.dates.check_out)} · ${nights(plan.dates.nights)}`), node('p', {}, `${plan.guests.adults} ${plural(plan.guests.adults, 'взрослый', 'взрослых', 'взрослых')}${plan.guests.children_ages.length ? ` · детей: ${plan.guests.children_ages.length}` : ''}`))),
+          priceBreakdown(plan), button('Вернуться к поездке', () => navigateJourney('#trip'), 'text-button recap-back'))));
   }
 
   function downloadOrder() {
-    const order = state.session.order;
-    if (!order) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(order, null, 2)], { type: 'application/json;charset=utf-8' }));
-    const link = node('a', { href: url, download: `rivane-${String(order.reference).replace(/[^a-zA-Z0-9А-Яа-я_-]/g, '')}.json` });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadPlan(state.session.order, state.session.requirements);
   }
 
   function booked() {
@@ -652,27 +865,60 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     if (!order) return selected();
     const plan = order.plan;
     return node('section', { class: 'booked-section' },
-      node('div', { class: 'confirmation-main' }, node('div', {}, node('div', { class: 'success-mark', 'aria-hidden': 'true' }, '✓'), node('h2', {}, 'Ваша демозаявка готова'), node('p', { class: 'order-reference' }, '№ ', order.reference),
-        node('p', { class: 'booked-description' }, 'План и условия сохранены. Реальная бронь не создана, деньги не списаны, письмо не отправляется. Подтверждение можно скачать или найти в «Моих поездках».'),
-        node('div', { class: 'order-actions' }, button('Скачать заявку ↓', downloadOrder), button('Спланировать ещё поездку ↗', resetTrip, 'button button-secondary'))),
-        node('figure', { class: 'confirmation-photo' }, node('img', { src: stayImage(plan), alt: '', width: 1200, height: 800 }), node('figcaption', { class: 'image-note' }, 'Иллюстрация демоотеля'))),
+      node('div', { class: 'confirmation-main' }, node('div', {}, node('div', { class: 'success-mark', 'aria-hidden': 'true' }, '✓'), node('h2', {}, plan.hotel.name), node('p', { class: 'order-reference' }, 'План № ', order.reference),
+        node('p', { class: 'booked-description' }, 'План доступен в «Моих поездках» в этом браузере. Его можно скачать. Бронирование не создано, письмо не отправлялось.'),
+        node('div', { class: 'order-actions' }, button('Скачать план', downloadOrder), button('Новая поездка', resetTrip, 'button button-secondary'))),
+        node('figure', { class: 'confirmation-photo' }, node('img', { src: stayImage(plan), alt: '', width: 1200, height: 800 }), node('figcaption', { class: 'image-note' }, 'Иллюстрация'))),
       node('div', { class: 'order-overview' }, node('div', {}, node('span', {}, 'Поездка'), node('strong', {}, plan.hotel.name), node('p', {}, `${date(plan.dates.check_in)} — ${date(plan.dates.check_out)}`)),
-        node('div', {}, node('span', {}, 'На имя'), node('strong', {}, order.traveler_name), node('p', {}, order.email)),
-        node('div', {}, node('span', {}, 'За всех'), node('strong', {}, money(order.total)), node('p', {}, 'Ничего не списано'))),
+        node('div', {}, node('span', {}, order.traveler_name ? 'На имя' : 'Где найти'), node('strong', {}, order.traveler_name || 'Мои поездки'), node('p', {}, order.email || 'В этом браузере')),
+        node('div', {}, node('span', {}, priceAudience(plan.guests)), node('strong', {}, money(order.total)), node('p', {}, 'Расчётная стоимость'))),
       node('details', { class: 'order-details' }, node('summary', {}, 'Весь маршрут и стоимость'), node('div', { class: 'selected-layout' }, tripDetails(plan), priceBreakdown(plan))));
   }
 
-  function history() {
+  function toggleChat(open = !state.chatOpen) {
+    state.chatOpen = open;
+    render();
+    (open ? document.querySelector('#refine-message') : document.querySelector('.chat-toggle'))?.focus({ preventScroll: true });
+  }
+
+  function conversation() {
+    const agent = state.session.agent;
+    const connected = agent?.mode === 'llm' || state.session.parser_mode === 'llm';
     const messages = state.session.messages || [];
-    if (!messages.length) return null;
-    return node('details', { class: 'history' }, node('summary', {}, 'История пожеланий', node('span', { 'aria-hidden': 'true' }, ' +')),
-      node('ol', {}, messages.map(message => node('li', { class: message.role === 'user' ? 'history-user' : 'history-assistant' }, node('strong', {}, message.role === 'user' ? 'Вы' : 'O!RIVANE'), node('p', {}, message.content)))));
+    const thread = node('ol', { class: 'chat-thread', 'aria-label': 'История разговора', tabindex: '0' },
+      messages.map(message => node('li', { class: message.role === 'user' ? 'chat-user' : 'chat-assistant' },
+        node('strong', {}, message.role === 'user' ? 'Вы' : 'O!RIVANE'), node('p', {}, readableDates(message.content)))));
+    const panel = node('aside', { id: 'travel-chat', class: 'travel-chat', hidden: !state.chatOpen, 'aria-labelledby': 'chat-title' },
+      node('div', { class: 'chat-heading' }, node('div', {}, node('h2', { id: 'chat-title' }, icon('spark', 19), 'Ваш помощник'), node('p', { class: `chat-mode${connected ? ' is-connected' : ''}` }, connected ? 'ИИ подключён · по данным поездки' : 'ИИ недоступен · основные команды работают')),
+        button('×', () => toggleChat(false), 'chat-close', { 'aria-label': 'Свернуть чат' })),
+      node('p', { class: 'chat-context' }, 'Один разговор на всём пути. Условия и история сохраняются.'),
+      thread,
+      node('div', { class: 'chat-evidence' }, conciergePanel()),
+      state.error ? node('p', { class: 'chat-error', role: 'status' }, state.error) : null,
+      state.messageRetry ? node('p', { class: 'chat-error chat-retry', role: 'status' }, 'ИИ не ответил. Черновик сохранён — проверьте ответ и условия перед повтором.') : null,
+      node('div', { class: 'chat-compose' }, composer(true),
+        node('p', { class: 'chat-hint' }, 'Ctrl + Enter — отправить. «А если…» — сначала сравнить.')));
+    panel.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.stopPropagation(); toggleChat(false); }
+      if (event.key !== 'Tab' || window.matchMedia('(min-width: 1100px)').matches) return;
+      const controls = [...panel.querySelectorAll('button, textarea, [tabindex="0"], summary')].filter(item => !item.disabled && item.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    });
+    requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
+    return panel;
   }
 
   function render() {
     main.replaceChildren();
     main.setAttribute('aria-busy', String(state.pending));
     document.body.classList.toggle('has-session', Boolean(state.session));
+    document.body.classList.toggle('chat-is-open', Boolean(state.session && state.chatOpen));
+    const view = journeyView(state.session, location.hash);
+    document.querySelector('#search-trip').hidden = view === 'confirmation';
+    if (state.session) document.body.dataset.journeyView = view;
+    else delete document.body.dataset.journeyView;
     newTrip.hidden = !state.session;
     newTrip.disabled = state.pending;
     document.querySelector('#how-link').hidden = false;
@@ -681,20 +927,93 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
     if (state.restoring) main.append(node('section', { class: 'restore-state', role: 'status' }, smallLabel('Возвращаемся к вашим планам'), node('h1', {}, 'Ваша поездка уже рядом.'), node('p', {}, 'Загружаем сохранённые пожелания и маршрут…')));
     else if (!state.session) main.append(landing());
     else {
-      main.append(sessionIntro());
-      if (state.session.stage === 'booked') main.append(booked());
-      else if (state.session.stage === 'clarify') main.append(clarification());
-      else if (state.session.stage === 'selected' && !state.showResults) main.append(selected());
-      else main.append(results());
+      const content = node('div', { class: 'journey-main' }, sessionIntro());
+      if (view === 'confirmation') content.append(booked());
+      else if (view === 'clarify') content.append(clarification());
+      else if (view === 'checkout') content.append(checkoutView());
+      else if (view === 'trip') content.append(selected());
+      else content.append(results());
+      if (view !== 'clarify' && state.session.requirements.destination) content.append(destinationPanel());
+      main.append(node('div', { class: 'journey-workspace' }, content, conversation()));
+      if (state.chatOpen) main.append(button('', () => toggleChat(false), 'chat-backdrop', { 'aria-label': 'Закрыть чат', tabindex: '-1' }));
+      main.append(button(node('span', {}, icon('spark', 19), 'Чат о поездке'), () => toggleChat(), 'chat-toggle', { 'aria-controls': 'travel-chat', 'aria-expanded': String(state.chatOpen), hidden: state.chatOpen && window.matchMedia('(min-width: 1100px)').matches }));
     }
+    syncChatLayout();
+    updateChatViewport();
+    if (state.session?.requirements?.destination) void destinationLoader.load();
+    else destinationLoader.cancel();
   }
+
+  function destinationPanel() {
+    const key = `${state.session?.id}:${state.session?.revision}`;
+    const data = destinationDataKey === key ? destinationData : null;
+    const link = (label, url) => validExternal(url) ? node('a', { href: validExternal(url), target: '_blank', rel: 'noopener noreferrer', class: 'context-link' }, label, ' ↗') : null;
+    const panel = node('section', { class: 'destination-context', 'aria-label': 'Информация о месте поездки' },
+      smallLabel('Открытые источники'), node('h2', {}, 'Ближе к месту поездки'),
+      node('p', { class: 'context-intro' }, 'Погода, места и дорога — отдельно от демонстрационных предложений отелей.'));
+    if (!data) { panel.append(node('p', { role: 'status', class: 'context-status' }, 'Загружаем сведения. Подбором уже можно пользоваться.')); return panel; }
+    if (!data.location) { panel.append(node('p', { role: 'status' }, 'Открытые источники сейчас не ответили. Условия и результаты подбора доступны.'), button('Повторить загрузку', () => { destinationLoader.cancel(); void destinationLoader.load(); }, 'text-button')); return panel; }
+    const place = data.location;
+    const weather = data.weather || {};
+    const calendarDate = value => new Date(value + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    const temp = value => Number.isFinite(value) ? `${Math.round(value)}°` : '—';
+    const weatherBlock = node('div', { class: 'context-weather' }, node('h3', {}, 'Погода · ', place.name));
+    if (weather.status === 'ok') {
+      if (Number.isFinite(weather.current?.temperature_c)) weatherBlock.append(node('p', { class: 'context-temperature' }, temp(weather.current.temperature_c), node('span', {}, 'Сейчас · данные погодной модели')));
+      weatherBlock.append(node('p', { class: 'context-caption' }, weather.coverage === 'outside_forecast' ? 'Прогноз на даты поездки ещё недоступен: горизонт источника — до 16 дней.' : weather.coverage === 'partial' ? 'Прогноз доступен на часть поездки. Более дальние дни пока не прогнозируются.' : weather.coverage === 'upcoming' ? 'Ближайшие дни. Укажите даты поездки, чтобы увидеть прогноз на свой срок.' : 'Прогноз на даты поездки. Он может меняться.'));
+      if (weather.days?.length) weatherBlock.append(node('ul', { class: 'context-days', 'aria-label': 'Прогноз по дням' }, weather.days.slice(0, 16).map(day => node('li', {}, node('span', {}, calendarDate(day.date)), node('strong', {}, temp(day.high_c)), node('span', {}, 'ночью ', temp(day.low_c)), node('small', {}, Number.isFinite(day.rain_probability_pct) ? `Осадки ${day.rain_probability_pct}%` : 'Вероятность осадков неизвестна')))));
+      if (weather.fetched_at) weatherBlock.append(node('p', { class: 'context-caption' }, 'Получено ', dateTime(weather.fetched_at)));
+    } else weatherBlock.append(node('p', {}, 'Источник погоды временно недоступен.'));
+    if (data.history?.status === 'ok') weatherBlock.append(node('p', { class: 'context-history' }, `История за ${data.history.month}: средняя дневная максимальная ${temp(data.history.mean_high_c)}, ночная минимальная ${temp(data.history.mean_low_c)}. Это прошлогодние наблюдения, не прогноз и не климатическая норма.`));
+    weatherBlock.append(link('Источник погоды: Open-Meteo · CC BY 4.0', 'https://open-meteo.com/'));
+    const mapBlock = node('div', { class: 'context-map' }, node('h3', {}, 'Место на карте'), node('p', {}, `${place.name}${place.country ? ', ' + place.country : ''}`), link('Открыть OpenStreetMap', data.map_url), node('p', { class: 'context-caption' }, 'Координаты населённого пункта, не отеля. Геокодирование: Open-Meteo / GeoNames.'));
+    mapBlock.append(button('Показать интерактивную карту', event => {
+      const url = validExternal(data.map_embed_url);
+      if (!url) return;
+      event.currentTarget.replaceWith(node('iframe', { src: url, title: `Карта: ${place.name}`, loading: 'lazy', class: 'context-map-frame', referrerpolicy: 'no-referrer' }));
+    }, 'choice-chip'), node('p', { class: 'context-caption' }, 'По нажатию карта загрузится с OpenStreetMap; сервис получит ваш IP-адрес.'), link('© OpenStreetMap contributors · ODbL', 'https://www.openstreetmap.org/copyright'));
+    const places = node('div', { class: 'context-places' }, node('h3', {}, 'Что посмотреть рядом'));
+    if (data.places?.attractions?.length) places.append(node('ul', { class: 'context-places-list' }, data.places.attractions.map(item => node('li', {}, link(item.name, item.url), node('small', {}, item.kind)))));
+    else places.append(node('p', {}, data.places?.status === 'ok' ? 'В открытой карте не нашлось отмеченных мест в радиусе 12 км.' : 'Источник достопримечательностей временно не ответил. Можно посмотреть места на карте.'));
+    places.append(node('p', { class: 'context-caption' }, 'Сведения из открытой карты. Часы работы, доступность и стоимость посещения не проверены.'), link('Источник: OpenStreetMap', 'https://www.openstreetmap.org/copyright'));
+    const transport = node('div', { class: 'context-road' }, node('h3', {}, 'Как добраться'));
+    if (data.road?.status === 'ok') transport.append(node('p', { class: 'context-route' }, `${data.road.origin} → ${data.road.destination}`), node('p', {}, `На автомобиле: около ${data.road.distance_km} км · ${data.road.duration_hours} ч`), link('Посмотреть маршрут', data.road.url), node('p', { class: 'context-caption' }, 'Расчёт OSRM по дорогам OpenStreetMap. Без пробок, остановок и проверки ограничений. Не время перелёта или поезда.'));
+    else transport.append(node('p', {}, 'Дорожный маршрут сейчас не рассчитан.'));
+    if (data.places?.transport_points?.length) transport.append(node('ul', { class: 'context-places-list' }, data.places.transport_points.map(item => node('li', {}, link(item.name, item.url), node('small', {}, item.kind)))));
+    transport.append(node('p', { class: 'context-caption' }, 'Живые цены, наличие билетов и расписания не подключены: требуется доступ перевозчика. Цены транспорта в подборе остаются демонстрационными.'));
+    panel.append(node('div', { class: 'context-grid' }, weatherBlock, mapBlock, places, transport));
+    return panel;
+  }
+
+  function syncChatLayout() {
+    const desktop = window.matchMedia('(min-width: 1100px)').matches;
+    const modalChat = Boolean(state.session && state.chatOpen && !desktop);
+    const toggle = document.querySelector('.chat-toggle');
+    if (toggle) toggle.hidden = state.chatOpen && desktop;
+    document.querySelector('.journey-main')?.toggleAttribute('inert', modalChat);
+    document.querySelector('.site-header').toggleAttribute('inert', modalChat);
+    document.querySelector('.site-footer').toggleAttribute('inert', modalChat);
+  }
+
+  function updateChatViewport() {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    document.documentElement.style.setProperty('--chat-viewport-height', `${Math.round(viewport.height * .88)}px`);
+    document.documentElement.style.setProperty('--chat-keyboard-inset', `${Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop))}px`);
+  }
+  window.visualViewport?.addEventListener('resize', updateChatViewport);
+  window.visualViewport?.addEventListener('scroll', updateChatViewport);
+  window.matchMedia('(min-width: 1100px)').addEventListener('change', syncChatLayout);
 
   function resetTrip() {
     if (state.pending) return;
+    explanations.cancel();
     state.session = null;
-    state.draft = '';
+    state.messageRetry = false;
+    restoreDraft();
     state.error = '';
-    state.showResults = false;
+    state.clarificationDate = '';
+    if (['#trip', '#checkout', '#options', '#confirmation'].includes(location.hash)) window.history.replaceState(null, '', location.pathname + location.search);
     state.checkout = { name: '', email: '', accepted: false };
     saveSession();
     render();
@@ -706,9 +1025,20 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
   document.querySelector('#home-link').addEventListener('click', event => { event.preventDefault(); resetTrip(); });
   document.querySelectorAll('[data-section]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); navigateSection(link.dataset.section); }));
   document.querySelector('#trips-link').addEventListener('click', showTrips);
-  document.querySelector('#search-trip').addEventListener('click', () => { if (!state.pending) { if (state.session) resetTrip(); document.querySelector('#trip-message')?.focus(); } });
+  document.querySelector('#search-trip').addEventListener('click', () => {
+    if (state.pending) return;
+    if (state.session) { toggleChat(true); return; }
+    const input = document.querySelector('#refine-message, #trip-message');
+    if (input) { input.focus(); input.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  });
   document.querySelector('#mobile-menu').addEventListener('click', event => { if (state.pending) return; const open = document.body.classList.toggle('menu-open'); event.currentTarget.setAttribute('aria-expanded', String(open)); event.currentTarget.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию'); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') closeNavigation(); });
+  window.addEventListener('hashchange', () => {
+    if (!state.session || state.pending) return;
+    render();
+    document.querySelector('[data-view-heading]')?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  });
   async function boot() {
     let sessionId;
     try { sessionId = localStorage.getItem(STORAGE_KEY); } catch { /* Storage is optional. */ }
@@ -725,7 +1055,9 @@ import { requirementsPatch, assignStayImages, readablePolicy, restoreStayImages 
       if (results[1].reason.status === 404) saveSession();
     }
     state.restoring = false;
+    restoreDraft();
     render();
+    void explanations.load();
   }
   boot();
 })();

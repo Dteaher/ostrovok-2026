@@ -1,13 +1,16 @@
 """Local-first travel agent HTTP boundary."""
 
+import asyncio
 import logging
 import os
 import secrets
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,19 +18,25 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from app.agent_transport import provider_session, shared_provider_client
+from app.destination_context import DestinationContext
+from app.explanations import ExplanationJobs
 from app.models import (
     CheckoutRequest,
     MessageRequest,
     PatchRequest,
+    RevisionRequest,
     SelectRequest,
     TripRequirements,
     UpdateMessageRequest,
 )
 from app.parser import configured_mode
-from app.search import find_plan, search, validate_plan
+from app.request_budget import RequestBudget, request_seconds, run_until
+from app.search import find_plan, validate_plan
 from app.service import (
     DATA_LABEL,
     apply_patch_to_state,
+    choose_offer,
     hotel_id,
     new_state,
     normalize_state,
@@ -46,12 +55,22 @@ logger = logging.getLogger(__name__)
 
 def create_app(db_url: str | None = None) -> FastAPI:
     database = Database(db_url or os.getenv("DB_URL", "sqlite:///data/oplan.db"))
+    explanations = ExplanationJobs()
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.initialize()
         logger.info("О!План ready; interpreter=%s; port=8080", configured_mode())
-        yield
+        async with provider_session() as provider, httpx.AsyncClient(
+            follow_redirects=False, headers={"User-Agent": "ORIVANE/1.0 (travel demo; public-data client)"}
+        ) as public_client:
+            application.state.provider = provider
+            application.state.destination_context = DestinationContext(public_client)
+            try:
+                yield
+            finally:
+                await explanations.close()
+                await application.state.destination_context.close()
         database.close()
 
     application = FastAPI(
@@ -61,19 +80,24 @@ def create_app(db_url: str | None = None) -> FastAPI:
 
     @application.middleware("http")
     async def headers_and_limits(request: Request, call_next):
+        request.state.started = time.monotonic()
         length = request.headers.get("content-length", "0")
         if length.isdigit() and int(length) > 32768:
             return JSONResponse(
                 {"detail": "Запрос слишком большой. Сократите описание до 4000 символов."},
                 status_code=413,
             )
-        response = await call_next(request)
+        token = shared_provider_client.set(getattr(application.state, "provider", None))
+        try:
+            response = await call_next(request)
+        finally:
+            shared_provider_client.reset(token)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+            "script-src 'self'; connect-src 'self'; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         )
         if request.url.path.startswith("/api/") or request.url.path == "/health":
             response.headers["Cache-Control"] = "no-store"
@@ -108,10 +132,10 @@ def create_app(db_url: str | None = None) -> FastAPI:
     async def invalid_value(request: Request, exc: ValueError):
         return JSONResponse({"detail": str(exc)}, status_code=422)
 
-    def load(session_id: str) -> dict:
+    def load(session_id: str, *, deadline=None) -> dict:
         if len(session_id) > 64:
             raise HTTPException(404, "Поездка не найдена. Начните новый подбор.")
-        state = database.load(session_id)
+        state = database.load(session_id, deadline=deadline)
         if state is None:
             raise HTTPException(404, "Поездка не найдена. Начните новый подбор.")
         return normalize_state(state)
@@ -128,6 +152,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
     def save(state: dict, previous: int, order: dict | None = None) -> dict:
         state["revision"] = previous + 1
         database.save(state, expected=previous, order=order)
+        explanations.start(state)
         return public_state(state)
 
     @application.get("/health")
@@ -164,23 +189,75 @@ def create_app(db_url: str | None = None) -> FastAPI:
         # the main UI; no externally hosted Swagger scripts are required.
         return RedirectResponse("/openapi.json")
 
+    async def message_response(payload, request, session_id=None):
+        # Include loading, normalization, persistence and JSON encoding in the
+        # same budget. Reserve a short final slice for the transactional save.
+        budget = RequestBudget(request.state.started,
+            request_seconds({"plans": [True]} if session_id else {}, payload.message))
+        async def execute():
+            if session_id:
+                state = await asyncio.to_thread(load, session_id, deadline=budget.deadline)
+                # Saved plans remain open to factual chat; handle_turn rejects
+                # every mutation. Keep optimistic concurrency for that history.
+                if state["revision"] != payload.revision:
+                    raise StaleRevision
+            else:
+                state = new_state()
+            state = await process_message(state, payload.message, budget=budget,
+                response_reserve=min(.25, budget.seconds * .1))
+            if session_id:
+                state["revision"] = payload.revision + 1
+                await asyncio.to_thread(database.save, state, expected=payload.revision,
+                                        deadline=budget.deadline)
+            else:
+                await asyncio.to_thread(database.create, state, deadline=budget.deadline)
+            explanations.start(state)
+            state["response_timing"]["elapsed_seconds"] = round(time.monotonic() - budget.started, 3)
+            return await asyncio.to_thread(JSONResponse, public_state(state))
+        try:
+            return await run_until(execute(), budget.deadline)
+        except TimeoutError as exc:
+            raise HTTPException(504, "Время ожидания истекло. Проверенные варианты текущей поездки сохранены. Обновите поездку и повторите запрос.") from exc
+
     @application.post("/api/sessions")
-    async def create_session(payload: MessageRequest):
-        state = await process_message(new_state(), payload.message)
-        database.create(state)
-        logger.info("Trip created; stage=%s matches=%s", state["stage"], state["total_matches"])
-        return public_state(state)
+    async def create_session(payload: MessageRequest, request: Request):
+        return await message_response(payload, request)
 
     @application.get("/api/sessions/{session_id}")
     def get_session(session_id: str):
         return public_state(load(session_id))
 
     @application.post("/api/sessions/{session_id}/messages")
-    async def update_message(session_id: str, payload: UpdateMessageRequest):
-        state = load(session_id)
-        guard(state, payload.revision)
-        state = await process_message(state, payload.message)
-        return save(state, payload.revision)
+    async def update_message(session_id: str, payload: UpdateMessageRequest, request: Request):
+        return await message_response(payload, request, session_id)
+
+    @application.post("/api/sessions/{session_id}/explanation")
+    async def get_explanation(session_id: str, payload: RevisionRequest):
+        state = await asyncio.to_thread(load, session_id)
+        if state["revision"] != payload.revision:
+            raise StaleRevision
+        agent = await explanations.get(state)
+        if (await asyncio.to_thread(load, session_id))["revision"] != payload.revision:
+            raise StaleRevision
+        return {"revision": payload.revision, "agent": agent}
+
+    @application.get("/api/sessions/{session_id}/destination-context")
+    async def get_destination_context(session_id: str, revision: int):
+        state = await asyncio.to_thread(load, session_id)
+        if state["revision"] != revision:
+            raise StaleRevision
+        req = TripRequirements.model_validate(state["requirements"])
+        if not req.destination:
+            return {"revision": revision, "status": "needs_destination", "location": None}
+        try:
+            async with asyncio.timeout(10):
+                result = await application.state.destination_context.get(
+                    req.destination, req.check_in, req.nights, req.origin)
+        except TimeoutError:
+            result = {"status": "unavailable", "location": None}
+        if (await asyncio.to_thread(load, session_id))["revision"] != revision:
+            raise StaleRevision
+        return {"revision": revision, **result}
 
     @application.patch("/api/sessions/{session_id}/requirements")
     def update_requirements(session_id: str, payload: PatchRequest):
@@ -205,20 +282,10 @@ def create_app(db_url: str | None = None) -> FastAPI:
         plan = find_plan(req, payload.plan_id)
         if plan is None:
             raise HTTPException(404, "Предложение не найдено в текущих условиях. Обновите подбор.")
-        errors = validate_plan(plan, req)
-        if errors:
-            raise HTTPException(409, "Поездка не прошла проверку: " + "; ".join(errors))
-        state.update(
-            stage="selected",
-            selected_plan=plan,
-            hotel_intent={"id": plan["hotel"]["id"], "name": plan["hotel"]["name"]},
-            request_status="idle",
-            hypothetical=None,
-            _hypothetical_pending=None,
-            changes=[],
-            assistant_message="Вы выбрали поездку. Проверьте состав и полную стоимость, затем можно оформить демонстрационный заказ.",
-        )
-        state["counterfactuals"] = search(req, hotel_id=hotel_id(state))["counterfactuals"]
+        try:
+            choose_offer(state, plan)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         return save(state, payload.revision)
 
     @application.post("/api/sessions/{session_id}/checkout")

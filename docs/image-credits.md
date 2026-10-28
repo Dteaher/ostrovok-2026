@@ -1,14 +1,23 @@
 # Image credits — O!RIVANE
 
-Verified against the primary photo pages and official license pages on 27 October 2026. Files are stored locally in `static/media/rivane/`; no external image URLs are required at runtime. All seven assets are photographs.
+Verified against the primary photo pages and official license pages on 27 October 2026. Files are stored locally in `static/media/rivane/`; no external image URLs are required at runtime. All eight assets are photographs. Hero updated on 28 October 2026.
 
 ## Context and disclosure
 
-The hero is a real photograph from Kaş, Turkey, used as travel atmosphere. It must not be presented as an actual Greater Sochi property or bookable hotel. Four destination thumbnails are source-labelled Sochi photographs whose precise district is unverified. Use the UI disclosure: **«Фотографии передают атмосферу отдыха. Изображения районов могут быть иллюстративными.»** The Sochi marine-terminal photo and Lazarevskoye beach have source captions supporting their regional identity.
+The active hero depicts the marine terminal and harbor in Sochi, per photographer caption. The previous Kaş, Turkey hero is retained as an unused asset; it is not presented as a Sochi property. Four destination thumbnails are source-labelled Sochi photographs whose precise district is unverified. Use the UI disclosure: **«Фотографии передают атмосферу отдыха. Изображения районов могут быть иллюстративными.»** The Sochi marine-terminal photo and Lazarevskoye beach have source captions supporting their regional identity.
 
 ## Assets
 
-### hero.webp
+### hero-sochi.webp
+
+- Photo: [Sochi marine terminal and harbor](https://unsplash.com/photos/a-bunch-of-boats-that-are-in-the-water-FnBRPxmYUuE)
+- Photographer: Alexey Elfimov
+- License: [Unsplash License](https://unsplash.com/license)
+- Use: Current landing hero; actual Sochi regional photograph, no hotel identity implied.
+- Local output: 2400 × 1600, 510,678 bytes.
+- Changes: Resized, converted to WebP. No compositing or generated imagery.
+
+### hero.webp (unused previous hero)
 
 - Photo: [Villa patio and infinity pool, Kaş, Turkey](https://www.pexels.com/photo/infinity-pool-and-patio-of-a-mountain-resort-20975726/)
 - Photographer: Ahmet ÇÖTÜR

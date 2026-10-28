@@ -6,6 +6,8 @@ controls tools, purchases, inventory, or monetary arithmetic.
 
 import re
 import secrets
+import time
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,7 +22,15 @@ from app.parser import (
     extract_intent,
     parse_rules,
 )
-from app.search import find_plan, search
+from app.request_budget import (
+    RequestBudget,
+    current_budget,
+    local_only,
+    request_seconds,
+    run_sync,
+    run_until,
+)
+from app.search import find_plan, search, validate_plan
 
 DATA_LABEL = "Демонстрационные отели, цены и расписания. Реальное бронирование не выполняется."
 FIELD_LABELS = {
@@ -75,6 +85,7 @@ def new_state() -> dict:
         "request_status": "idle",
         "order": None,
         "changes": [],
+        "change_receipt": None,
         "parser_mode": configured_mode(),
         "data_label": DATA_LABEL,
         "assumptions": [],
@@ -83,15 +94,38 @@ def new_state() -> dict:
         "_explicit": [],
         "_month_hint": None,
         "_metrics": {"turns": 0, "searches": 0, "clarifications": 0},
+        "_initial_values": {},
+        "_requirement_history": [],
+        "_ranking": "balanced",
+        "_ranking_version": 1,
+        "agent": None,
     }
 
 
 def public_state(state: dict) -> dict:
-    return {key: value for key, value in state.items() if not key.startswith("_")}
+    return {key: value for key, value in state.items() if not key.startswith("_")} | {"ranking": state.get("_ranking", "balanced")}
 
 
 def hotel_id(state: dict) -> str | None:
     return (state.get("hotel_intent") or {}).get("id")
+
+
+def choose_offer(state: dict, plan: dict) -> dict:
+    """One validated selection operation shared by HTTP and explicit chat intent."""
+    if state.get("order") or state.get("clarifications") or state["stage"] not in {"results", "selected"}:
+        raise ValueError("Сначала уточните условия поездки")
+    req = TripRequirements.model_validate(state["requirements"])
+    errors = validate_plan(plan, req)
+    if errors:
+        raise ValueError("Поездка не прошла проверку: " + "; ".join(errors))
+    state.pop("_explanation", None)
+    state.update(stage="selected", selected_plan=plan,
+        hotel_intent={"id": plan["hotel"]["id"], "name": plan["hotel"]["name"]},
+        request_status="idle", hypothetical=None, _hypothetical_pending=None,
+        changes=[], change_receipt=None, agent=None,
+        assistant_message="Вы выбрали поездку. Проверьте состав и полную стоимость, затем можно оформить демонстрационный заказ.")
+    state["counterfactuals"] = search(req, hotel_id=hotel_id(state))["counterfactuals"]
+    return state
 
 
 def normalize_state(state: dict) -> dict:
@@ -100,7 +134,12 @@ def normalize_state(state: dict) -> dict:
     Booked orders remain historical records. Unbooked legacy choices retain the
     hotel intention and require confirmation of a freshly calculated offer.
     """
-    legacy = state.get("schema_version", 1) < 2
+    legacy = state.get("schema_version", 1) < 2 or state.get("_ranking_version") != 1
+    state.setdefault("_initial_values", {})
+    state.setdefault("_requirement_history", [])
+    state.setdefault("_ranking", "balanced")
+    state.setdefault("agent", None)
+    state.setdefault("change_receipt", None)
     state.setdefault("hotel_intent", None)
     state.setdefault("hotel_alternative", None)
     state.setdefault("diagnostic", None)
@@ -120,6 +159,7 @@ def normalize_state(state: dict) -> dict:
             "с актуальной демонстрационной стоимостью."
         )
     state["schema_version"] = 2
+    state["_ranking_version"] = 1
     return state
 
 
@@ -135,11 +175,13 @@ def merged_requirements(current: TripRequirements, patch: dict) -> TripRequireme
     return TripRequirements.model_validate(values | patch)
 
 
-def refresh_search(state: dict, requirements: TripRequirements) -> None:
-    result = search(requirements, hotel_id=hotel_id(state))
+def refresh_search(state: dict, requirements: TripRequirements, *, retain_hotel: bool = True) -> None:
+    state.pop("_explanation", None)
+    state["agent"] = None
+    result = search(requirements, hotel_id=hotel_id(state) if retain_hotel else None, ranking=state.get("_ranking", "balanced"))
     state["_metrics"]["searches"] += 1
     state.update(
-        stage="results", selected_plan=None,
+        stage="results", selected_plan=None, change_receipt=None,
         **{key: result[key] for key in (
             "plans", "plan_labels", "total_matches", "counterfactuals", "suggestions",
             "catalog_version", "diagnostic",
@@ -290,11 +332,16 @@ def assumptions_for(req: TripRequirements, explicit: set[str]) -> list[str]:
 
 def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = None) -> dict:
     normalize_state(state)
+    state["agent"] = None
     if intent.hypothetical:
         return hypothetical_reply(state, intent, user_text)
     state["_hypothetical_pending"] = None
     state["hypothetical"] = None
     previous_selection = state["selected_plan"]
+    previous_offer = previous_selection or (
+        state["plans"][0] if state.get("hotel_intent") and state.get("plans") else None
+    )
+    state["change_receipt"] = None
     old = TripRequirements.model_validate(state["requirements"])
     allowed = ALLOWED_PATCH | {"unsupported"}
     if set(intent.patch) - allowed:
@@ -317,6 +364,20 @@ def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = 
                 },
             ]
     changed = search_terms(old) != search_terms(requirements)
+    if changed:
+        state["_agent_pending"] = None
+        changed_fields = sorted(key for key in intent.patch if old.model_dump(mode="json")[key] != requirements.model_dump(mode="json")[key])
+        values = requirements.model_dump(mode="json", exclude={"assumptions", "unsupported"})
+        if not state["_requirement_history"]:
+            # Defaults shown on the first trip are part of its initial state too.
+            state["_initial_values"] = values
+        else:
+            for key in intent.patch:
+                if key in values and state["_initial_values"].get(key) is None:
+                    state["_initial_values"][key] = values[key]
+        state["_requirement_history"].append({"before": old.model_dump(mode="json"),
+                                             "after": requirements.model_dump(mode="json"), "fields": changed_fields})
+        state["_requirement_history"] = state["_requirement_history"][-30:]
     if intent.release_hotel:
         state["hotel_intent"] = None
         previous_selection = None
@@ -327,6 +388,12 @@ def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = 
     requirements.assumptions = assumptions_for(requirements, explicit)
     state["_explicit"] = sorted(explicit)
     state["requirements"] = requirements.model_dump(mode="json")
+    if user_text and intent.recognized:
+        preference_fields = {"quiet", "pool", "breakfast", "refundable", "max_beach_m", "min_rating", "stars", "preference_modes"}
+        confirmed = {key: state["requirements"][key] for key in intent.patch if key in preference_fields}
+        if confirmed:
+            state.setdefault("_preference_sources", []).append({"values": confirmed, "message": user_text[:1000]})
+            state["_preference_sources"] = state["_preference_sources"][-30:]
     state["assumptions"] = requirements.assumptions
     state["changes"] = [
         {
@@ -483,6 +550,22 @@ def compile_state(state: dict, intent: ParsedIntent, *, user_text: str | None = 
                 assistant += " Ниже — проверенные поиском изменения; применю только после вашего выбора."
             if state["hotel_alternative"]:
                 assistant += " При тех же условиях есть другие отели. Могу показать их с вашего согласия."
+    if not questions and (state.get("plans") or state.get("diagnostic")):
+        from app.agent import local_presentation
+        state["agent"] = local_presentation(state)
+    if changed and previous_offer and state.get("plans") and not questions:
+        after = state["plans"][0]
+        preserved = after["hotel"]["id"] == previous_offer["hotel"]["id"]
+        state["change_receipt"] = {
+            "before_total": previous_offer["price"]["total"],
+            "after_total": after["price"]["total"],
+            "before_nights": previous_offer["dates"]["nights"],
+            "after_nights": after["dates"]["nights"],
+            "before_check_in": previous_offer["dates"]["check_in"],
+            "after_check_in": after["dates"]["check_in"],
+            "hotel_preserved": preserved,
+            "hotel_name": after["hotel"]["name"],
+        }
     return record_reply(state, (notices + " " + assistant).strip(), user_text)
 
 
@@ -490,6 +573,8 @@ def contextual_answer(req: TripRequirements, questions: list[dict], message: str
     """Resolve bounded answers only against the question that actually asked them."""
     pending = {q["field"] for q in questions}
     text = message.strip().lower().replace("ё", "е")
+    if "children_ages" in pending:
+        text = re.sub(r"^(?:ему|ей|ребенку|сыну|дочери|младшему|младшей)\s+", "", text)
     # Only tightly bounded answers acquire context. Free text is still parsed
     # normally, so a bare number cannot silently become a budget or an age.
     if "children_ages" in pending and (
@@ -523,8 +608,74 @@ def contextual_answer(req: TripRequirements, questions: list[dict], message: str
     return None
 
 
-async def process_message(state: dict, message: str) -> dict:
+async def process_message(state: dict, message: str, *, budget=None, response_reserve=0) -> dict:
+    # The timer starts before parsing, normalization or catalogue work.
+    budget = budget or RequestBudget(time.monotonic(), request_seconds(state, message))
+    started = budget.started
+    token = current_budget.set(budget)
+    working = deepcopy(state)
+    working.pop("_explanation", None)
+    fallback = None
+    async def execute():
+        nonlocal fallback
+        from app.agent import handle_turn, local_decision
+        if configured_mode() == "llm":
+            if local_decision(state, message) is None:
+                fallback = await run_sync(_offline_result, deepcopy(state), message)
+            else:
+                offline_token = local_only.set(True)
+                try:
+                    fallback = await handle_turn(deepcopy(state), message)
+                finally:
+                    local_only.reset(offline_token)
+        return await _process_message(working, message)
+    try:
+        result = await run_until(execute(), budget.deadline - response_reserve)
+        result["response_timing"] = {"limit_seconds": budget.seconds,
+            "elapsed_seconds": round(time.monotonic() - started, 3), "timed_out": False}
+        return result
+    except TimeoutError:
+        # Interrupted state transitions are rolled back. Previously verified
+        # results remain available, even when a detached search worker finishes.
+        result = deepcopy(fallback if fallback is not None else state)
+        result.pop("_explanation", None)
+        text = "AI не успел ответить за отведённое время."
+        text += (" Показаны условия, распознанные локально; проверьте их перед выбором."
+                 if fallback is not None else " Условия поездки сохранены.")
+        if result.get("plans"):
+            text += " Доступные проверенные варианты показаны ниже; можно выбрать их или повторить запрос."
+        else:
+            text += " Повторите запрос или задайте условия через форму."
+        if result.get("agent"):
+            result["agent"].update(mode="local", notice=text, explanation_status="timeout")
+        result["parser_mode"] = "fallback"
+        result["response_timing"] = {"limit_seconds": budget.seconds,
+            "elapsed_seconds": round(time.monotonic() - started, 3), "timed_out": True}
+        return record_reply(result, text, message)
+    finally:
+        current_budget.reset(token)
+
+
+def _offline_result(state, message):
     normalize_state(state)
+    req = TripRequirements.model_validate(state["requirements"])
+    rules = contextual_answer(req, state["clarifications"], message)
+    if rules is None:
+        rules = parse_rules(message, req, today=local_today())
+    if not rules.recognized or state.get("_hypothetical_pending"):
+        return None
+    return compile_state(state, rules, user_text=message)
+
+
+async def _process_message(state: dict, message: str) -> dict:
+    await run_sync(normalize_state, state)
+    from app.agent import enrich_results, handle_turn
+    handled = await handle_turn(state, message)
+    if handled is not None:
+        return handled
+    if state.get("order"):
+        return record_reply(state, "Сохранённый план не изменён. Задайте вопрос о датах, гостях, цене или составе поездки; для новых условий начните другой подбор.", message)
+    state["agent"] = None
     req = TripRequirements.model_validate(state["requirements"])
     branch = state.get("_hypothetical_pending")
     if branch and not state["clarifications"]:
@@ -534,7 +685,7 @@ async def process_message(state: dict, message: str) -> dict:
             answer = parse_rules(message, merged_requirements(req, branch["patch"]), today=local_today())
         fields = {q["field"] for q in branch["questions"]}
         if answer.hypothetical:
-            return compile_state(state, answer, user_text=message)
+            return await run_sync(compile_state, state, answer, user_text=message)
         if fields.intersection(answer.patch):
             questions = []
             child_question = next(
@@ -554,9 +705,9 @@ async def process_message(state: dict, message: str) -> dict:
                 hypothetical=True, recognized=True, questions=questions,
                 hypothetical_patch=branch["patch"] | answer.patch,
             )
-            return compile_state(state, intent, user_text=message)
+            return await run_sync(compile_state, state, intent, user_text=message)
         if not answer.recognized:
-            return compile_state(state, ParsedIntent(
+            return await run_sync(compile_state, state, ParsedIntent(
                 hypothetical=True, recognized=True,
                 hypothetical_patch=branch["patch"], questions=branch["questions"],
             ), user_text=message)
@@ -570,7 +721,10 @@ async def process_message(state: dict, message: str) -> dict:
             hypothetical=True, recognized=True,
             hypothetical_patch=branch["patch"], questions=branch["questions"],
         )
-    return compile_state(state, intent, user_text=message)
+    result = await run_sync(compile_state, state, intent, user_text=message)
+    if not intent.recognized:
+        return result
+    return await enrich_results(result, message)
 
 
 def apply_patch_to_state(state: dict, patch: dict) -> dict:

@@ -36,7 +36,7 @@ def main():
 
         def act(action):
             with page.expect_response(
-                lambda r: "/api/sessions" in r.url and r.request.method in {"POST", "PATCH"}
+                lambda r: "/api/sessions" in r.url and r.request.method in {"POST", "PATCH"}, timeout=60000
             ):
                 action()
             expect(page.locator("#main")).to_have_attribute("aria-busy", "false")
@@ -54,6 +54,13 @@ def main():
         pause(6)
         page.locator(".hotel-grid").scroll_into_view_if_needed()
         pause(10)
+        act(lambda: page.get_by_role("button", name="Сравнить два варианта", exact=True).click())
+        page.locator(".concierge-notes").scroll_into_view_if_needed()
+        pause(8)
+        if page.get_by_role("button", name="Ниже цена", exact=True).count():
+            act(lambda: page.get_by_role("button", name="Ниже цена", exact=True).first.click())
+            page.locator(".hotel-grid").scroll_into_view_if_needed()
+            pause(6)
         page.locator("#refine-message").press_sequentially("Теперь завтрак обязателен", delay=45)
         act(lambda: page.locator(".composer-submit").click())
         page.locator(".conditions").scroll_into_view_if_needed()
@@ -68,7 +75,7 @@ def main():
         page.locator("#refine-message").press_sequentially("Оставь этот отель, но сократи поездку на день", delay=45)
         act(lambda: page.locator(".composer-submit").click())
         expect(page.locator(".hotel-card")).to_have_count(1)
-        page.locator(".hotel-intent-note").scroll_into_view_if_needed()
+        page.locator(".change-receipt").scroll_into_view_if_needed()
         pause(6)
         page.locator(".hotel-grid").scroll_into_view_if_needed()
         pause(6)
@@ -76,7 +83,7 @@ def main():
         page.locator("#refine-message").scroll_into_view_if_needed()
         page.locator("#refine-message").press_sequentially("Добавь ребёнка", delay=55)
         act(lambda: page.locator(".composer-submit").click())
-        expect(page.locator(".checkout-submit")).to_be_disabled()
+        expect(page.locator(".decision-continue")).to_be_disabled()
         page.locator(".clarification-questions").scroll_into_view_if_needed()
         pause(6)
         page.locator("#refine-message").scroll_into_view_if_needed()
@@ -85,10 +92,12 @@ def main():
         page.locator(".hotel-grid").scroll_into_view_if_needed()
         pause(5)
         act(lambda: page.get_by_role("button", name="Подтвердить новый план", exact=False).click())
-        page.locator(".detail-summary").scroll_into_view_if_needed()
+        page.locator(".trip-showcase").scroll_into_view_if_needed()
         pause(9)
         page.locator(".timeline-section").scroll_into_view_if_needed()
         pause(10)
+        page.locator('.decision-continue').click()
+        page.locator('.optional-contacts > summary').click()
         page.locator(".checkout-form").scroll_into_view_if_needed()
         pause(5)
         page.locator("#traveler-name").fill("Демо путешественник")

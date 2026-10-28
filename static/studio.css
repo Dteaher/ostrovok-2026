@@ -1,0 +1,137 @@
+/* Editorial hierarchy. Presentation only; existing interaction hooks are retained. */
+:root { --studio-ink: #183c49; --studio-muted: #49606a; --studio-rule: #c8cec5; --studio-gold: #8b6539; --studio-radius: 3px; }
+body { color: var(--studio-ink); }
+h1,h2,h3 { text-wrap: balance; }
+.site-header .brand-caption { display: none; }
+body .theme-chip,body .theme-chip>span { font-size: 13px; backdrop-filter: none; }
+body .theme-chip { background: #183c49; }
+body .theme-chip:hover { background: #274e5a; transform: none; }
+body:not(.has-session) .site-header { background: #143442; }
+body .hero-composer .composer-submit { background: #143442; color: #fff9ed; }
+body .hero-composer .composer-submit:hover { background: #244f5c; }
+body .destination-note,body .site-footer,body .footer-brand>span { color: #49606a; }
+body .footer-brand { font-family: var(--sans); font-size: 18px; }
+body .journey-heading .eyebrow,body .journey-heading em,body .step-number { color: #785732; }
+body .destination-heading .outline-button>span { font-size: 13px; }
+.has-session .eyebrow { color: #785732; }
+.has-session .trip-decision>.eyebrow { color: #f2dbb7; }
+.has-session[data-journey-view=results] .journey-progress li>span { color: #f2dbb7; }
+.has-session .context-route { font-family: var(--sans); font-size: 20px; }
+.site-header .demo-badge { display: inline-block; flex-shrink: 0; padding: 5px 9px; border: 1px solid currentColor; border-radius: 2px; font: 600 13px/1.3 var(--sans); color: #77532c; background: #faf4e8; white-space: nowrap; }
+.site-header .brand { flex-shrink: 0; }
+.site-header { gap: 16px; }
+body .button,body .outline-button,body .example-button,body .header-new,body .theme-chip { border-radius: var(--studio-radius); }
+body .button:hover:not(:disabled),body .outline-button:hover { box-shadow: none; }
+body :is(button,a,input,textarea,select,summary):focus-visible { outline: 2px solid #94652f; outline-offset: 4px; }
+body :is(button,a,input,textarea,select,summary) { transition: color 180ms ease,background-color 180ms ease,border-color 180ms ease; }
+body button:disabled { opacity: 1; color: #52616a; background: #e1e5df; border-color: #bac4bc; cursor: not-allowed; }
+body .hero-composer { border-radius: 4px; box-shadow: none; }
+body .hero-composer .composer-submit { border-radius: 3px; }
+body .destination-card,body .destination-card-content { border-radius: 2px; }
+body .hero-demo-note { color: #fff8e9; }
+body .hero-photo-credit { font-size: 13px; color: #fff8e9; }
+body .lux-hero .eyebrow { color: #f0d0a3; }
+body .destination-heading .eyebrow { color: #785732; }
+.has-session .journey-workspace { gap: 24px; }
+.has-session .session-intro .demo-tag { display: none; }
+.has-session[data-journey-view=results] .session-intro { padding: 13px 16px; border-radius: 2px; margin-bottom: 22px; }
+.has-session[data-journey-view=results] .session-intro>.journey-progress,
+.has-session[data-journey-view=results] .session-intro>.session-title-row { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+.has-session[data-journey-view=results] .conditions { border: 0; padding: 0; }
+.has-session[data-journey-view=results] .condition-main { gap: 12px; }
+.has-session[data-journey-view=results] .condition-list { font-size: 13px; }
+.has-session[data-journey-view=results] .preference-strengths { margin-top: 7px; font-size: 13px; }
+.has-session[data-journey-view=results] .assistant-message { padding: 9px 0 0; margin-top: 9px; border-top: 1px solid #ffffff38; border-left: 0; background: none; font-size: 13px; }
+.has-session[data-journey-view=results] .assistant-message p { margin: 0; }
+.has-session[data-journey-view=results] .assistant-mark { display: none; }
+.has-session .section-heading { margin-bottom: 10px; }
+.has-session .section-heading h2 { font: 600 20px/1.35 var(--sans); }
+.has-session .hotel-grid { gap: 18px; }
+.has-session .hotel-card,.has-session .hotel-card:last-child:nth-child(3) { border: 0; border-radius: 0; background: transparent; box-shadow: none; border-top: 1px solid var(--studio-rule); }
+.has-session .hotel-card:hover { transform: none; box-shadow: none; }
+.has-session .hotel-body,.has-session .hotel-card:last-child:nth-child(3) .hotel-body { padding: 16px 0 0; }
+.has-session .hotel-body h3,.has-session.chat-is-open .hotel-body h3 { font-size: 30px; line-height: 1.05; margin: 10px 0 12px; min-height: 0; }
+.has-session .hotel-image,.has-session .hotel-card:last-child:nth-child(3) .hotel-image { border-radius: 0; }
+.has-session .recommendation { padding: 6px 9px; border-radius: 0; font-size: 13px; color: #183c49; background: #fff9ed; }
+.has-session .hotel-card-recommended .recommendation { background: #183c49; color: #fff9ed; }
+.has-session .image-note { font-size: 13px; color: #fff; background: #183c49; }
+.has-session .total-price,.has-session.chat-is-open .hotel-grid .total-price { font-size: 30px; line-height: 1.15; margin-bottom: 12px; }
+.has-session .total-price>span,.has-session .total-price>.price-includes { font-size: 13px; color: var(--studio-muted); }
+.has-session .stay-facts { gap: 10px; }
+.has-session .stay-facts dt,.has-session .stay-facts dd,.has-session.chat-is-open .hotel-grid .stay-facts>div:last-child dd { font-size: 13px; }
+.has-session .stay-facts dt { color: var(--studio-muted); }
+.has-session .fit-list { font-size: 13px; color: #284f45; margin-top: 12px; }
+.has-session .card-bottom { padding-top: 12px; }
+.has-session .card-price-details,.has-session .offer-tradeoff { font-size: 13px; color: #365664; }
+.has-session .trip-showcase { border-radius: 0; grid-template-columns: minmax(0,1.3fr) minmax(300px,1fr); }
+.has-session .trip-decision { padding: 26px; }
+.has-session .trip-decision h2 { font-size: 30px; }
+.has-session .trip-decision .stay-cautions { display: block; margin: 0 0 20px; padding-top: 15px; border-top: 1px solid #ffffff40; }
+.has-session .trip-decision .stay-cautions>div { gap: 10px; margin-bottom: 12px; }
+.has-session .trip-decision .stay-cautions h3 { color: #f2dbb7; }
+.has-session .trip-decision .stay-cautions p { color: #f3f3e9; font-size: 13px; line-height: 1.5; }
+.has-session .trip-decision .stay-cautions svg { color: #e3ca9f; }
+.has-session .stay-cautions p { font-size: 13px; }
+.has-session .decision-price strong { font-size: 42px; }
+.has-session .journey-progress { font-size: 13px; gap: 18px; }
+.has-session .journey-progress li>span { border: 0; background: transparent; border-radius: 0; width: auto; color: #785732; font-size: 13px; }
+.has-session .journey-progress .is-current>span { background: transparent; color: #183c49; }
+.has-session .checkout-panel { border: 0; border-top: 2px solid #183c49; border-radius: 0; background: transparent; padding: 24px 0; }
+.has-session .checkout-recap { border-radius: 0; padding: 24px; background: #e8ece1; }
+.has-session .checkout-panel .stay-cautions { grid-template-columns: 1fr; gap: 16px; margin: 18px 0 24px; }
+.has-session .checkout-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 22px 0 0; padding: 16px 0; border-block: 1px solid var(--studio-rule); }
+.has-session .checkout-total span { font-size: 14px; }
+.has-session .checkout-total strong { font: 600 30px/1.2 var(--sans); white-space: nowrap; }
+.has-session .travel-chat { border-radius: 0; }
+.has-session :is(.chat-mode,.chat-context,.chat-thread strong,.chat-hint,.chat-evidence .concierge-provenance,.chat-evidence .concierge-notice,.decision-note,.decision-price small,.decision-price>span,.included-services li,.showcase-rating>span,.route-notice,.timeline-time,.route-day-heading>span,.eyebrow,.condition-list,.preference-strengths,.result-priorities,.hotel-meta,.rating,.section-heading p) { font-size: 13px; }
+.has-session :is(.chat-context,.chat-hint,.route-notice,.timeline-time,.route-day-heading>span,.section-heading p) { color: #49606a; }
+.has-session .showcase-rating { border-radius: 0; }
+.has-session .chat-toggle { border-radius: 3px; box-shadow: none; font-size: 13px; }
+@media(min-width:1100px) {
+ .has-session.chat-is-open .hotel-body,.has-session.chat-is-open .hotel-card:last-child:nth-child(3) .hotel-body { padding: 14px 0 0; }
+ .has-session.chat-is-open .hotel-image,.has-session.chat-is-open .hotel-card:last-child:nth-child(3) .hotel-image { height: 125px; }
+ .has-session.chat-is-open .hotel-grid .button { font-size: 13px; }
+ .has-session.chat-is-open .trip-showcase { grid-template-columns: minmax(0,1.15fr) minmax(300px,1fr); }
+}
+@media(max-width:850px) {
+ .site-header .demo-badge { margin-left: auto; font-size: 13px; }
+ .site-header { flex-wrap: wrap; gap: 10px; }
+ .site-header .brand-caption { display: none; }
+ .has-session .journey-progress { gap: 12px; }
+}
+@media(max-width:600px) {
+ .site-header { flex-wrap: nowrap; height: auto; min-height: 76px; padding-top: 12px; padding-bottom: 12px; gap: 8px; }
+ .site-header .brand-name { font-size: 28px; }
+ .site-header .header-actions { gap: 10px; }
+ .site-header .header-new { font-size: 13px; padding: 6px; max-width: 70px; white-space: normal; line-height: 1.2; }
+ .site-header .demo-badge { padding: 4px 6px; }
+ .has-session[data-journey-view=results] .session-intro { margin: 0 0 20px; padding: 12px; }
+ .has-session[data-journey-view=results] .condition-main { align-items: flex-start; }
+ .has-session[data-journey-view=results] .condition-list { gap: 7px 0; }
+ .has-session .journey-progress { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+ .has-session .journey-progress li { flex-direction: row; font-size: 13px; }
+ .has-session .hotel-grid { gap: 28px; }
+ .has-session .hotel-card { display: grid; grid-template-columns: 95px minmax(0,1fr); gap: 14px; padding-top: 14px; }
+ .has-session .hotel-image,.has-session .hotel-card:last-child:nth-child(3) .hotel-image { height: 160px; min-height: 0; }
+ .has-session .hotel-image .recommendation { position: static; display: block; padding: 7px 5px; font-size: 13px; line-height: 1.35; }
+ .has-session .hotel-image img { height: 100%; }
+ .has-session .hotel-image .image-note { display: none; }
+ .has-session .hotel-body,.has-session .hotel-card:last-child:nth-child(3) .hotel-body { padding: 0; }
+ .has-session .hotel-body h3 { font-size: 28px; margin: 9px 0; }
+ .has-session .total-price { font-size: 29px; }
+ .has-session .hotel-meta { gap: 5px; font-size: 13px; }
+ .has-session .stay-facts { grid-template-columns: 1fr; gap: 6px; }
+ .has-session .stay-facts>div { display: flex; gap: 7px; flex-wrap: wrap; }
+ .has-session .stay-facts dt { min-width: 52px; }
+ .has-session .result-priorities { gap: 4px 14px; font-size: 13px; }
+ .has-session .trip-showcase { display: flex; flex-direction: column; }
+ .has-session .showcase-photo { height: 205px; }
+ .has-session .trip-decision { padding: 24px 20px; }
+ .has-session .trip-decision .decision-price { order: -1; margin: 0 0 22px; padding: 0 0 18px; border-top: 0; border-bottom: 1px solid #ffffff40; }
+ .has-session .checkout-layout { display: flex; flex-direction: column; }
+ .has-session .checkout-panel { order: 0; width: 100%; }
+ .has-session .checkout-recap { order: 1; width: 100%; }
+ .has-session .checkout-panel h2 { font-size: 32px; }
+ .has-session .chat-compose { padding-bottom: 18px; }
+}
+@media(prefers-reduced-motion:reduce) { body *,body *::before,body *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

@@ -4,6 +4,7 @@ This experiment is NOT the production assistant; it separates model understandin
 from the legacy parser's merge/evidence gates. One request per case, no retries.
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -25,10 +26,10 @@ if str(ROOT) not in sys.path:
 
 from typing import Literal  # noqa: E402
 
-from app.llm_config import LLMConfig  # noqa: E402
+from app.llm_config import LLMConfig, parse_json_content  # noqa: E402
 from app.models import TripRequirements  # noqa: E402
 
-MODELS = ("openai/gpt-5.4-mini", "google/gemini-3.8-flash")
+MODELS = ("deepseek-v4.1-flash", "gemini-3.8-flash", "gpt-6.1-terra")
 
 
 class Intent(BaseModel):
@@ -72,7 +73,7 @@ def assess(intent, current, expected_action, expected):
     return failures
 
 
-async def run():
+async def run(models=MODELS, output="artifacts/multiai-direct-comparison.json"):
     today = datetime.now(ZoneInfo("Europe/Moscow")).date()
     req = TripRequirements(destination="Сочи", check_in=today + timedelta(days=40),
                            budget=500000, breakfast=True, direct_only=True)
@@ -90,7 +91,7 @@ async def run():
         + json.dumps(TripRequirements.model_json_schema(), ensure_ascii=False)
     )
     records = []
-    for model in MODELS:
+    for model in models:
         with patch.dict(os.environ, {"LLM_MODEL": model}):
             config = LLMConfig.from_env()
         async with httpx.AsyncClient(timeout=config.timeout, follow_redirects=False) as client:
@@ -107,7 +108,8 @@ async def run():
                     record["status"] = response.status_code
                     response.raise_for_status()
                     body = response.json()
-                    intent = Intent.model_validate_json(body["choices"][0]["message"]["content"])
+                    record["finish_reason"] = body["choices"][0].get("finish_reason")
+                    intent = Intent.model_validate(parse_json_content(body["choices"][0]["message"]["content"]))
                     record["failures"] = assess(intent, req, action, expected)
                     record["intent"] = intent.model_dump()
                     record["usage"] = {k: v for k, v in body.get("usage", {}).items() if isinstance(v, (int, float))}
@@ -120,17 +122,22 @@ async def run():
                 if record["status"] in {400, 401, 402, 403, 404, 429}:
                     break
     report = {"experiment": "direct intent extraction; NOT production integration",
+              "base_url": config.base_url,
               "generated_at": datetime.now(ZoneInfo("Europe/Moscow")).isoformat(), "results": records}
-    target = ROOT / "artifacts" / "llm-direct-comparison.json"
-    target.parent.mkdir(exist_ok=True)
+    target = ROOT / output
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if all(r["passed"] for r in records) else 1
 
 
 if __name__ == "__main__":
+    cli = argparse.ArgumentParser(description=__doc__)
+    cli.add_argument("--models", nargs="+", default=MODELS)
+    cli.add_argument("--output", default="artifacts/multiai-direct-comparison.json")
+    args = cli.parse_args()
     load_dotenv(ROOT / ".env", override=False)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     if not os.getenv("LLM_API_KEY", "").strip():
         print("Не настроен LLM_API_KEY. Внешние вызовы не выполнялись.")
         raise SystemExit(2)
-    raise SystemExit(asyncio.run(run()))
+    raise SystemExit(asyncio.run(run(args.models, args.output)))

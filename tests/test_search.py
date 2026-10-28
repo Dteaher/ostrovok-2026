@@ -234,7 +234,7 @@ def test_hotel_budget_includes_mandatory_pet_fee_and_budget_suggestion():
     "mutate",
     [
         lambda p: p["hotel"].update(rating=10),
-        lambda p: p["hotel"].update(stars=5),
+        lambda p: p["hotel"].update(stars=1 if p["hotel"]["stars"] == 5 else 5),
         lambda p: p["hotel"].update(beach_m=0),
         lambda p: p["hotel"].update(id="h09"),
         lambda p: p["guests"].update(children_ages=[1]),

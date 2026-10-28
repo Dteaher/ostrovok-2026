@@ -25,13 +25,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.llm_config import LLMConfig  # noqa: E402
+from app.llm_config import LLMConfig, parse_json_content  # noqa: E402
 from app.models import TripRequirements, search_terms  # noqa: E402
 from app.parser import ALLOWED_PATCH, ParsedIntent, configured_mode  # noqa: E402
 from app.search import search, validate_plan  # noqa: E402
 from app.service import compile_state, new_state, process_message  # noqa: E402
+from scripts.dialogue_stress_cases import stress_cases  # noqa: E402
 
-MODELS = ("openai/gpt-5.4-mini", "google/gemini-3.8-flash")
+MODELS = ("deepseek-v4.1-flash", "gemini-3.8-flash", "gpt-6.1-terra")
 
 
 def cases(today):
@@ -152,6 +153,12 @@ def setup(case):
 
 def assertions(before, after, turn):
     failures = []
+    if turn.get("no_order") and after.get("order") != before.get("order"):
+        failures.append({"check": "unrequested_order"})
+    if turn.get("no_new_questions") and after["clarifications"] != before["clarifications"]:
+        failures.append({"check": "unrequested_clarification"})
+    if turn.get("no_questions") and after["clarifications"]:
+        failures.append({"check": "unexpected_clarification", "fields": [q["field"] for q in after["clarifications"]]})
     req = after["requirements"]
     for field, value in turn.get("after", {}).items():
         if req[field] != value:
@@ -182,7 +189,7 @@ def assertions(before, after, turn):
 
 async def evaluate(models, rules_only=False, max_calls=40, suite="core"):
     today = datetime.now(ZoneInfo("Europe/Moscow")).date()
-    dataset = informal_cases(today) if suite == "informal" else cases(today)
+    dataset = stress_cases(today) if suite == "stress" else informal_cases(today) if suite == "informal" else cases(today)
     records, calls = [], []
     original_client = httpx.AsyncClient
 
@@ -203,7 +210,7 @@ async def evaluate(models, rules_only=False, max_calls=40, suite="core"):
                         entry["finish_reason"] = choice.get("finish_reason")
                         entry["content_chars"] = len(choice.get("message", {}).get("content") or "")
                         entry["usage"] = {k: v for k, v in body.get("usage", {}).items() if isinstance(v, (int, float))}
-                        proposal = json.loads(body["choices"][0]["message"]["content"])
+                        proposal = parse_json_content(body["choices"][0]["message"]["content"])
                         proposed_patch = proposal.get("patch")
                         entry["valid_json_envelope"] = isinstance(proposed_patch, dict)
                         if isinstance(proposed_patch, dict):
@@ -217,7 +224,9 @@ async def evaluate(models, rules_only=False, max_calls=40, suite="core"):
             finally:
                 entry["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
 
-    with patch("app.parser.httpx.AsyncClient", RecordingClient):
+    # This suite isolates extraction/state semantics; the concierge has its own
+    # tool/evidence tests and bounded real-provider evaluations.
+    with patch("app.parser.httpx.AsyncClient", RecordingClient), patch.dict(os.environ, {"AGENT_ENABLED": "0"}):
         for model in models:
             with patch.dict(os.environ, {"LLM_MODEL": "" if rules_only else model}):
                 for case in dataset:
@@ -268,8 +277,10 @@ async def evaluate(models, rules_only=False, max_calls=40, suite="core"):
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--rules-only", action="store_true")
-    cli.add_argument("--suite", choices=["core", "informal"], default="core")
-    cli.add_argument("--output", default="artifacts/llm-comparison.json")
+    cli.add_argument("--models", nargs="+", default=MODELS)
+    cli.add_argument("--max-calls", type=int, default=40)
+    cli.add_argument("--suite", choices=["core", "informal", "stress"], default="core")
+    cli.add_argument("--output", default="artifacts/multiai-comparison.json")
     args = cli.parse_args()
     load_dotenv(ROOT / ".env", override=False)
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -278,7 +289,9 @@ def main():
             print("Не настроен ключ/модель. Добавьте LLM_API_KEY в .env. Реальные тесты не выполнялись.")
             return 2
         LLMConfig.from_env()
-    report = asyncio.run(evaluate(["offline-rules"] if args.rules_only else MODELS, args.rules_only, suite=args.suite))
+    report = asyncio.run(evaluate(["offline-rules"] if args.rules_only else args.models, args.rules_only, max_calls=args.max_calls, suite=args.suite))
+    if not args.rules_only:
+        report["base_url"] = LLMConfig.from_env().base_url
     target = Path(args.output)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -1,0 +1,24 @@
+.destination-context { margin: 52px 0 24px; padding-top: 28px; border-top: 1px solid #c9c6bb; color: #163443; }
+.destination-context h2 { font-family: Georgia, serif; font-size: clamp(29px, 3vw, 40px); font-weight: 400; margin: 8px 0 14px; }
+.destination-context h3 { font-size: 18px; font-weight: 500; margin: 0 0 18px; }
+.context-intro, .context-caption { color: #596d73; line-height: 1.65; }
+.context-caption { font-size: 12px; margin: 14px 0; }
+.context-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px 28px; margin-top: 30px; }
+.context-grid > div { min-width: 0; border-top: 1px solid #d9d5ca; padding-top: 22px; }
+.context-temperature { display: flex; align-items: center; gap: 18px; font-family: Georgia, serif; font-size: 54px; margin: 12px 0; }
+.context-temperature span { font: 13px/1.5 Arial, sans-serif; max-width: 180px; color: #596d73; }
+.context-days { display: flex; gap: 0; list-style: none; padding: 0 0 10px; overflow-x: auto; }
+.context-days li { display: flex; flex: 0 0 105px; flex-direction: column; gap: 8px; padding: 12px 10px; border-left: 1px solid #ddd8ce; font-size: 12px; }
+.context-days strong { font-size: 22px; font-weight: 500; }
+.context-days small { color: #596d73; }
+.context-link { display: inline-block; color: #163443; text-decoration: underline; text-underline-offset: 4px; line-height: 1.6; }
+.context-link:hover { color: #896532; }
+.context-link:focus-visible { outline: 2px solid #896532; outline-offset: 4px; }
+.context-map-frame { display: block; width: 100%; height: 280px; border: 1px solid #c9c6bb; margin: 18px 0; }
+.context-places-list { list-style: none; padding: 0; }
+.context-places-list li { padding: 10px 0; border-bottom: 1px solid #e3ded3; }
+.context-places-list small { display: block; margin-top: 4px; color: #596d73; }
+.context-route { font-size: 20px; font-family: Georgia, serif; }
+.context-history { padding-left: 14px; border-left: 2px solid #a28a63; font-size: 13px; line-height: 1.7; }
+.context-map .choice-chip { margin-top: 15px; }
+@media(max-width: 680px) { .context-grid { grid-template-columns: 1fr; gap: 26px; } .destination-context { margin-top: 34px; } }

@@ -36,11 +36,27 @@ Session v2 also exposes `hotel_intent:{id,name}|null`, `hotel_alternative:{total
 Hypothetical result includes `{patch,total_matches,min_total,baseline_min_total,diagnostic,hotel_id}`. It is cleared on actual edits/new selection/checkout. Applying it uses the ordinary revision-checked PATCH, never automatic mutation.
 
 `POST /api/sessions/{id}/select` body `{plan_id:string,revision:int}` → Session.
-`POST /api/sessions/{id}/checkout` body `{revision:int,accept_demo:true,traveler_name:string,email:string}` → Session. Name 2..100 chars and plausible email required. Order: {id,reference,status:"demo_confirmed",created_at,total,currency,traveler_name,email,plan:Plan,notice:string}. Checkout revalidates and is idempotent. No real card input.
+`POST /api/sessions/{id}/checkout` body `{revision:int,accept_demo:true,traveler_name?:string|null,email?:string|null}` → Session. Contacts are optional; missing/blank contacts become null. If supplied, name must be 2..100 chars and email must be plausible. Order: {id,reference,status:"demo_confirmed",created_at,total,currency,traveler_name,email,plan:Plan,notice:string}. Checkout revalidates and is idempotent. No real card input.
 
 `PATCH /api/sessions/{id}/requirements` body `{revision:int,patch:dict}` for explicit chips/clarification controls → Session. Only allowed TripRequirements fields. Patch changes exactly specified fields, preserves others; nested preference modes merge per field. Date shift suggestions should send natural language or explicit date.
 
 Errors JSON `{detail:string}` with 404 missing session/plan, 409 stale revision, 422 invalid input. Frontend must show recovery, not fake success. Use textContent or safe escaping; no untrusted innerHTML.
+
+## Bounded concierge
+
+`GET /api/sessions/{id}/destination-context?revision=N` returns read-only Open-Meteo weather/geocoding/history, OpenStreetMap map links/POIs and OSRM driving route. Revision is checked before and after fetching; conflicts return409. It never changes trip state, catalogue prices, orders or agent evidence. Each component has an explicit status and source. Current weather is distinct from trip forecasts; far dates receive labelled historical data rather than fabricated forecasts. The UI fetches independently after displaying results. Optional map iframe is loaded only on click. See `docs/open-travel-data.md` for licences, privacy, cache and verified availability.
+
+User messages share one monotonic deadline across loading, parsing, catalogue work, model/tool calls, persistence and response encoding: ordinary 10s (target 3–5s), existing-trip changes across multiple dimensions 15s, alternatives 20s. The backend reserves up to 250ms for saving. An interrupted transition cannot publish a detached worker's state. SQLite contention fails fast; PostgreSQL uses statement timeouts (real PostgreSQL execution remains unverified).
+
+`response_timing` exposes `{limit_seconds, elapsed_seconds, timed_out}`. Timeout fallback preserves available canonical results, sets `parser_mode=fallback`, and never claims an LLM success. Storage timeout/contention returns HTTP504 with a retry message.
+
+Initial results include verified local facts immediately. `agent.explanation_status=pending` indicates optional narration running within the original deadline. `POST /api/sessions/{id}/explanation` accepts `{revision}` and returns `{revision,agent}`; it never updates requirements, selection, orders, history or revision. It checks revision both before and after waiting. Stale calls return409. Expired/missing jobs return local facts with an honest notice, never a fresh paid request. Jobs are process-local, bounded, cancelled on newer revisions, and stopped during shutdown; the supplied launch uses one worker. Multiple workers require shared job storage or sticky routing for narration delivery.
+
+Session also exposes `agent` (null or {tool,title,mode,facts,actions,question,notice,offer_indices,requested}). Facts carry server-generated text and source references; model output can select evidence IDs but cannot supply prices or inventory. Explicit comparison/detail requests open the explanation; routine search explanations remain optional. A requirement change invalidates earlier evidence.
+
+Private initial snapshots, requirement history (last 30), ranking and agent trace are persisted but excluded from the response. Restore commands re-run canonical search, preserving unrelated conditions. Ranking supports balanced/price/beach/rating after hard filtering. `search` accepts the optional keyword `ranking="balanced"`.
+
+Agent tools cannot create orders. An explicit ordinal selection uses the same canonical selection operation as `/select`; checkout still requires the separate consent form and current revision. Existing CAS and idempotency guarantees apply to conversational operations.
 
 ## UX
 Brand O!RIVANE, a premium contemporary travel product; all visible copy Russian. One clear opening free-text action; no dashboard or filter wall. At most 3 distinct hotel plan options, coherent total prices, concise reasons and honest compromises. Conversation with visible retained conditions, selected trip details, explicit demo checkout, downloadable order through browser-generated JSON. Respect keyboard and reduced motion. External calls must not be required to render the app. No placeholder actions. Saved-trip navigation stores capability IDs and display metadata locally and restores through the existing GET session endpoint; it does not imply an account or change the API/state schema. Legacy `oplan-session-v1` stays supported to preserve existing sessions.

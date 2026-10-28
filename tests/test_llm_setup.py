@@ -28,6 +28,8 @@ def provider(monkeypatch):
             payload = {"choices": [{"message": {"content": json.dumps({
                 "patch": {"budget": 160000}, "recognized": True,
             })}}]} if state["status"] == 200 else {"error": "pza_test_not_real private-provider-body"}
+            if state["status"] == 200 and "content" in state:
+                payload["choices"][0]["message"]["content"] = state["content"]
             encoded = json.dumps(payload).encode()
             self.send_response(state["status"])
             self.send_header("Content-Type", "application/json")
@@ -129,13 +131,23 @@ def test_application_readiness_and_public_config_do_not_call_model_or_expose_key
         assert not provider["requests"]
 
 
-def test_compose_and_runtime_include_polza_settings_and_probe():
+def test_fenced_provider_json_still_obeys_domain_validation(provider):
+    req = TripRequirements(budget=180000)
+    provider["content"] = '```json\n{"patch":{"budget":160000},"recognized":true}\n```'
+    result = asyncio.run(extract_intent("Бюджет 160 тысяч", req, date(2026, 10, 27)))
+    assert result.mode == "llm" and result.patch["budget"] == 160000
+    provider["content"] = '```json\n{"patch":{"secret":"invented"},"recognized":true}\n```'
+    result = asyncio.run(extract_intent("Бюджет 160 тысяч", req, date(2026, 10, 27)))
+    assert result.mode != "llm" and "secret" not in result.patch
+
+
+def test_compose_and_runtime_include_multiai_settings_and_probe():
     root = Path(__file__).resolve().parents[1]
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
     dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
     template = (root / ".env.example").read_text(encoding="utf-8")
     assert "COPY --chown=oplan:oplan scripts ./scripts" in dockerfile
-    assert "LLM_BASE_URL: ${LLM_BASE_URL:-https://polza.ai/api/v1}" in compose
-    assert "LLM_MODEL: ${LLM_MODEL:-openai/gpt-5.4-mini}" in compose
+    assert "LLM_BASE_URL: ${LLM_BASE_URL:-https://multiai.store/v1}" in compose
+    assert "LLM_MODEL: ${LLM_MODEL:-gpt-5.6-luna}" in compose
     assert "LLM_API_KEY=\n" in template
     assert "LLM_MAX_TOKENS:" in compose and "LLM_TEMPERATURE:" in compose
