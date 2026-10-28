@@ -29,7 +29,6 @@ def run():
             )
             page = context.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
-            page.route("**/api/sessions/*/destination-context?*", lambda route: route.abort())
             page.goto(base, wait_until="networkidle")
             page.evaluate("document.fonts.ready")
             expect(page.locator("#home-link")).to_contain_text("RIVANE")
@@ -106,23 +105,19 @@ def run():
             assert page.evaluate("localStorage.getItem('oplan-session-v1')") is None
             if width == 1440:
                 # Consent and traveler details belong to the selected trip.
-                page.locator(".theme-chip").first.click()
-                expect(page.locator("#trip-message")).not_to_have_value("")
                 with page.expect_response(
                     lambda r: r.url.endswith("/api/sessions") and r.request.method == "POST"
                 ):
-                    page.locator(".composer-submit").click()
+                    page.locator(".theme-chip").first.click()
                 expect(page.locator(".hotel-card")).to_have_count(3)
                 page.locator(".hotel-card .button").first.click()
                 expect(page.locator("#traveler-name")).to_be_visible()
                 second_trip_id = page.evaluate("localStorage.getItem('oplan-session-v1')")
                 page.locator("#home-link").click()
-                page.locator(".theme-chip").nth(1).click()
-                expect(page.locator("#trip-message")).not_to_have_value("")
                 with page.expect_response(
                     lambda r: r.url.endswith("/api/sessions") and r.request.method == "POST"
                 ):
-                    page.locator(".composer-submit").click()
+                    page.locator(".theme-chip").nth(1).click()
                 expect(page.locator(".hotel-card")).to_have_count(3)
                 page.locator(".hotel-card .button").first.click()
                 expect(page.locator("#traveler-name")).to_be_visible()
